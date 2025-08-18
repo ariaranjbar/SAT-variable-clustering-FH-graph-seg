@@ -5,6 +5,7 @@
 /cmake_install.cmake
 /*.sln
 /*.vcxproj*
+/benchmarks/
 
 # OS/Editors
 .DS_Store

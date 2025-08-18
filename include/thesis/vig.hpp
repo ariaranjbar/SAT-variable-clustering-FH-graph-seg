@@ -17,6 +17,7 @@ struct Edge {
 struct VIG {
   uint32_t n{0};
   std::vector<Edge> edges;
+  size_t aggregation_memory{0};
 };
 
 // Build VIG by aggregating over clause variable pairs.

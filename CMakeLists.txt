@@ -6,6 +6,23 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# macOS-specific fixes for finding standard library headers
+if(APPLE)
+    # Get the SDK path
+    execute_process(COMMAND xcrun --show-sdk-path 
+                    OUTPUT_VARIABLE MACOS_SDK_PATH 
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    
+    # Add system include paths explicitly
+    include_directories(SYSTEM 
+        "${MACOS_SDK_PATH}/usr/include/c++/v1"
+        "${MACOS_SDK_PATH}/usr/include"
+    )
+    
+    # Set the sysroot
+    set(CMAKE_OSX_SYSROOT ${MACOS_SDK_PATH})
+endif()
+
 option(THESIS_ENABLE_IPO "Enable interprocedural optimization if supported" ON)
 include(CheckIPOSupported)
 if(THESIS_ENABLE_IPO)

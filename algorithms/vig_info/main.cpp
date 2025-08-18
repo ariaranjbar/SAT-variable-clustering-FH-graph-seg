@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
     size_t maxbuf = 50'000'000; // default max contributions in optimized mode
     bool use_naive = false, use_opt = true;
 
-    for (int i = 1; i < argc; ++i) {
+    for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if ((a == "-i" || a == "--input") && i + 1 < argc) { path = argv[++i]; }
         else if (a == "-tau" && i + 1 < argc) {
@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
                         << " time_sec=" << sec
                         << " impl=" << (use_naive ? "naive" : "opt")
                         << " tau=" << (tau == std::numeric_limits<unsigned>::max() ? -1 : (int)tau)
+                        << " agg_memory=" << g.aggregation_memory
                         << "\n";
     return 0;
 }

@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     // Show first few clauses as a preview
     const auto& cls = cnf.get_clauses();
     size_t show = std::min<size_t>(cls.size(), 5);
-    for (size_t i = 0; i < show; ++i) {
+    for (size_t i = 0; i < show; i++) {
         std::cout << i << ":";
         for (int lit : cls[i]) std::cout << ' ' << lit;
         std::cout << " 0" << std::endl;

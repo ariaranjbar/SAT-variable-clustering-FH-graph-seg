@@ -96,9 +96,9 @@ private:
     if (valid && variable_compaction) {
       std::vector<int> variable_map(variable_count, 0);
       unsigned int current_renamed_variable = 1;
-      for (size_t c_idx = 0; c_idx < clauses.size(); ++c_idx) {
+      for (size_t c_idx = 0; c_idx < clauses.size(); c_idx++) {
         auto &clause = clauses[c_idx];
-        for (size_t l_idx = 0; l_idx < clause.size(); ++l_idx) {
+        for (size_t l_idx = 0; l_idx < clause.size(); l_idx++) {
           int literal = clause[l_idx];
           unsigned int var_idx = static_cast<unsigned int>(std::abs(literal)) - 1;
           if (var_idx >= variable_map.size()) {
