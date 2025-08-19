@@ -6,6 +6,7 @@
 #include <iostream>
 #include <cstdlib>   // std::atoi, std::abs
 #include <istream>
+#include <algorithm>
 
 namespace thesis {
 
@@ -91,9 +92,10 @@ private:
       }
     }
 
-    valid = clauses.size() == clause_count;
+    // Perform optional variable compaction first
+    valid = true; // We'll normalize and set clause_count to actual retained clauses
 
-    if (valid && variable_compaction) {
+    if (variable_compaction) {
       std::vector<int> variable_map(variable_count, 0);
       unsigned int current_renamed_variable = 1;
       for (size_t c_idx = 0; c_idx < clauses.size(); c_idx++) {
@@ -113,6 +115,50 @@ private:
         }
       }
       variable_count = current_renamed_variable - 1;
+    }
+
+    // Normalize all clauses: sort by abs(var), drop tautologies, deduplicate duplicates.
+    // Keep only non-empty, non-tautological clauses.
+    if (valid) {
+      std::vector<std::vector<int>> normalized;
+      normalized.reserve(clauses.size());
+
+      for (auto &clause : clauses) {
+        if (clause.empty()) continue; // Skip empty
+
+        std::sort(clause.begin(), clause.end(), [](int a, int b) {
+          int aa = std::abs(a), bb = std::abs(b);
+          if (aa != bb) return aa < bb;
+          return a < b; // tie-break for deterministic order
+        });
+
+        std::vector<int> out;
+        out.reserve(clause.size());
+        bool taut = false;
+
+        int prev_abs = 0;
+        int prev_sign = 0;
+        bool has_prev = false;
+        for (int lit : clause) {
+          const int a = std::abs(lit);
+          const int s = (lit < 0) ? -1 : 1;
+          if (has_prev && a == prev_abs) {
+            if (s != prev_sign) { taut = true; break; } // literal and its negation present
+            // duplicate with same sign, skip
+            continue;
+          }
+          // new variable (by abs)
+          out.push_back(lit);
+          prev_abs = a; prev_sign = s; has_prev = true;
+        }
+
+        if (!taut && !out.empty()) {
+          normalized.push_back(std::move(out));
+        }
+      }
+
+      clauses.swap(normalized);
+      clause_count = static_cast<unsigned int>(clauses.size());
     }
     return valid;
   }

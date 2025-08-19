@@ -31,4 +31,10 @@ VIG build_vig_optimized(const CNF& cnf,
                         std::size_t max_buffer_contributions,
                         bool sort_descending_by_weight = true);
 
+VIG build_vig_optimized(const CNF& cnf,
+                        unsigned clause_size_threshold,
+                        std::size_t max_buffer_contributions,
+                        bool sort_descending_by_weight,
+                        unsigned num_threads);
+
 } // namespace thesis
