@@ -22,19 +22,16 @@ struct VIG {
 
 // Build VIG by aggregating over clause variable pairs.
 VIG build_vig_naive(const CNF& cnf,
-                    unsigned clause_size_threshold = std::numeric_limits<unsigned>::max(),
-                    bool sort_descending_by_weight = true);
+          unsigned clause_size_threshold = std::numeric_limits<unsigned>::max());
 
 // Optimized/batched variant with fixed buffer capacity in number of (a,b,w) triples.
 VIG build_vig_optimized(const CNF& cnf,
                         unsigned clause_size_threshold,
-                        std::size_t max_buffer_contributions,
-                        bool sort_descending_by_weight = true);
+            std::size_t max_buffer_contributions);
 
 VIG build_vig_optimized(const CNF& cnf,
                         unsigned clause_size_threshold,
                         std::size_t max_buffer_contributions,
-                        bool sort_descending_by_weight,
                         unsigned num_threads);
 
 } // namespace thesis

@@ -38,6 +38,8 @@ endif()
 add_library(thesis_common STATIC
   src/common/timer.cpp
   src/common/cli.cpp
+  src/common/disjoint_set.cpp
+  src/common/segmentation.cpp
   src/common/vig.cpp
 )
 add_library(thesis::common ALIAS thesis_common)

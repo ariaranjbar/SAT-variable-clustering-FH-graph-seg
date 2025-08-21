@@ -142,8 +142,7 @@ namespace thesis
   // Naive single-threaded builder (hash-map aggregation).
   // --------------------------------------------------------------------------
   VIG build_vig_naive(const CNF &cnf,
-                      unsigned clause_size_threshold,
-                      bool sort_descending_by_weight)
+                      unsigned clause_size_threshold)
   {
     VIG result;
     result.n = cnf.get_variable_count();
@@ -191,16 +190,7 @@ namespace thesis
       result.edges.push_back(Edge{u, v, kv.second});
     }
 
-    if (sort_descending_by_weight)
-    {
-      std::sort(result.edges.begin(), result.edges.end(),
-                [](const Edge &A, const Edge &B)
-                {
-                  if (A.w != B.w) return A.w > B.w;
-                  if (A.u != B.u) return A.u < B.u;
-                  return A.v < B.v;
-                });
-    }
+  // No sorting here; consumers can sort if needed (e.g., segmentation).
 
   // Memory accounting: only if enabled at compile time.
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
@@ -222,20 +212,18 @@ namespace thesis
 
   VIG build_vig_optimized(const CNF &cnf,
                           unsigned clause_size_threshold,
-                          std::size_t max_buffer_contributions,
-                          bool sort_descending_by_weight)
+                          std::size_t max_buffer_contributions)
   {
     const unsigned fallback_threads =
         std::max(1u, std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 1u);
-    return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions,
-                               sort_descending_by_weight, fallback_threads);
+  return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions,
+                 fallback_threads);
   }
 
   VIG build_vig_optimized(const CNF &cnf,
-                          unsigned clause_size_threshold,
-                          std::size_t max_buffer_contributions,
-                          bool sort_descending_by_weight,
-                          unsigned num_threads)
+              unsigned clause_size_threshold,
+              std::size_t max_buffer_contributions,
+              unsigned num_threads)
   {
     using detail::inv_binom2;
 
@@ -599,16 +587,7 @@ namespace thesis
       std::vector<Edge>().swap(ve);
     }
 
-    if (sort_descending_by_weight)
-    {
-      std::sort(result.edges.begin(), result.edges.end(),
-                [](const Edge &A, const Edge &B)
-                {
-                  if (A.w != B.w) return A.w > B.w;
-                  if (A.u != B.u) return A.u < B.u;
-                  return A.v < B.v;
-                });
-    }
+  // No sorting here; consumers can sort if needed.
 
   // ---------------- Memory breakdown & final aggregation_memory ----------------
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
