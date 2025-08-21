@@ -9,6 +9,7 @@ int main(int argc, char** argv) {
 
     std::string path;
     bool compact = true;
+    bool normalize = true;
 
     // If first arg looks like an option, use ArgParser; otherwise, keep legacy positional behavior.
     bool use_options = (argc <= 1) || (argc > 1 && argv[1][0] == '-');
@@ -16,6 +17,7 @@ int main(int argc, char** argv) {
         ArgParser cli("Show basic info about a DIMACS CNF file");
         cli.add_option(OptionSpec{.longName = "input", .shortName = 'i', .type = ArgType::String, .valueName = "FILE|-", .help = "Path to CNF file or '-' for stdin", .required = true});
         cli.add_flag("no-compact", '\0', "Disable variable compaction during parsing");
+        cli.add_flag("no-normalize", '\0', "Disable clause normalization during parsing");
 
         bool proceed = true;
         try {
@@ -31,6 +33,7 @@ int main(int argc, char** argv) {
 
         path = cli.get_string("input");
         compact = !cli.get_flag("no-compact");
+        normalize = !cli.get_flag("no-normalize");
     } else {
         // Legacy: cnf_info <file.cnf|-> [no-compact]
         if (argc < 2) {
@@ -43,26 +46,21 @@ int main(int argc, char** argv) {
 
     thesis::Timer t_total;
     thesis::Timer t_parse;
-    thesis::CNF cnf = (path == "-") ? thesis::CNF(std::cin, compact)
-                                     : thesis::CNF(path, compact);
+    thesis::CNF cnf = (path == "-") ? thesis::CNF(std::cin, compact, normalize)
+                                     : thesis::CNF(path, compact, normalize);
     const double sec_parse = t_parse.sec();
     if (!cnf.is_valid()) {
         std::cerr << "Invalid CNF or mismatch with declared clause count." << std::endl;
         return 2;
     }
 
-    std::cout << "variables=" << cnf.get_variable_count()
-              << ", clauses=" << cnf.get_clause_count() << std::endl;
-
-    // Show first few clauses as a preview
-    const auto& cls = cnf.get_clauses();
-    size_t show = std::min<size_t>(cls.size(), 5);
-    for (size_t i = 0; i < show; i++) {
-        std::cout << i << ":";
-        for (int lit : cls[i]) std::cout << ' ' << lit;
-        std::cout << " 0" << std::endl;
-    }
     const double sec_total = t_total.sec();
-    std::cout << "parse_sec=" << sec_parse << " total_sec=" << sec_total << std::endl;
+    std::cout << "vars=" << cnf.get_variable_count()
+              << " clauses=" << cnf.get_clause_count()
+              << " parse_sec=" << sec_parse
+              << " total_sec=" << sec_total
+              << " compacted=" << (compact ? 1 : 0)
+              << " normalized=" << (normalize ? 1 : 0)
+              << "\n";
     return 0;
 }

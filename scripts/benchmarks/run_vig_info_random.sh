@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib_bench.sh"
 
 # Run vig_info on N random benchmarks from the benchmarks/ folder.
-# For each file, test both --naive and --opt across tau, threads, and maxbuf.
+# For each file, test the selected implementation(s) across tau, threads, and maxbuf.
 # Results are appended as CSV and per-run logs under scripts/benchmarks/out/.
 #
 # Usage:
@@ -13,7 +13,8 @@ source "$SCRIPT_DIR/lib_bench.sh"
 #     --taus 1,2,inf \
 #     --threads 1,2,4 \
 #     --maxbufs 20000000,50000000,100000000 \
-#     --memlimits 2048,4096
+#     --memlimits 2048,4096 \
+#     --implementations naive,opt
 #
 # Notes:
 # - If --bin is not provided, tries common default locations.
@@ -31,13 +32,14 @@ REUSE_CSV=""      # when set, reuse file list from this CSV (defaults to $CSV)
 SKIP_EXISTING=0    # when 1, skip runs already present in CSV
 VERBOSE=0
 DRY_RUN=0
+IMPLS=(naive opt)
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BENCH_DIR="$ROOT_DIR/benchmarks"
 OUT_DIR="$ROOT_DIR/scripts/benchmarks/out"
 CSV="$OUT_DIR/vig_info_results.csv"
 
 usage() {
-  echo "Usage: $0 -n N [--bin PATH] [--taus a,b,c] [--threads a,b,c] [--maxbufs a,b,c] [--memlimits mb,mb] [--cache|--no-cache] [--reuse-files] [--from-csv PATH] [--skip-existing] [--dry-run] [--verbose|-v]" >&2
+  echo "Usage: $0 -n N [--bin PATH] [--taus a,b,c] [--threads a,b,c] [--maxbufs a,b,c] [--memlimits mb,mb] [--implementations naive[,opt]] [--cache|--no-cache] [--reuse-files] [--from-csv PATH] [--skip-existing] [--dry-run] [--verbose|-v]" >&2
   echo "       tau must be >= 3 or 'inf' (since clauses of size < 2 are irrelevant)." >&2
   echo "       Note: when --reuse-files/--from-csv is used, -n is ignored and the file set comes from the CSV (unique entries in the file column)." >&2
   exit 1
@@ -60,6 +62,8 @@ while [[ $# -gt 0 ]]; do
       IFS=',' read -r -a MAXBUFS <<< "${2:-}"; shift 2 ;;
     --memlimits)
       IFS=',' read -r -a MEMLIMITS <<< "${2:-}"; shift 2 ;;
+    --implementations)
+      IFS=',' read -r -a IMPLS <<< "${2:-}"; shift 2 ;;
     --cache)
       CACHE_DECOMPRESS=1; shift ;;
     --no-cache)
@@ -80,6 +84,26 @@ while [[ $# -gt 0 ]]; do
       echo "Unknown arg: $1" >&2; usage ;;
   esac
 done
+
+  # Validate IMPLS values (allow only naive or opt); default to both if empty
+  if [[ ${#IMPLS[@]} -eq 0 ]]; then
+    IMPLS=(naive opt)
+  fi
+  for __impl in ${IMPLS[@]+"${IMPLS[@]}"}; do
+    case "$__impl" in
+      naive|opt) ;;
+      *) echo "Error: --implementations entries must be 'naive' or 'opt' (comma-separated)" >&2; exit 1 ;;
+    esac
+  done
+
+  # Helper to check membership in IMPLS
+  has_impl() {
+    local name="$1"
+    for x in ${IMPLS[@]+"${IMPLS[@]}"}; do
+      if [[ "$x" == "$name" ]]; then return 0; fi
+    done
+    return 1
+  }
 
 if [[ "$N" -le 0 ]]; then
   echo "Error: -n N must be > 0" >&2
@@ -324,51 +348,55 @@ for f in ${sel[@]+"${sel[@]}"}; do
   fi
 
   # naive: threads fixed to 1; ignore maxbuf; sweep memlimits if provided
-  for tau in "${TAUS[@]}"; do
-    if [[ ${#MEMLIMITS[@]} -gt 0 ]]; then
-      for ml in "${MEMLIMITS[@]}"; do
-        # Skip if already exists in CSV
+  if has_impl naive; then
+    for tau in "${TAUS[@]}"; do
+      if [[ ${#MEMLIMITS[@]} -gt 0 ]]; then
+        for ml in "${MEMLIMITS[@]}"; do
+          # Skip if already exists in CSV
+          if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
+            ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
+            key="$display_base,naive,$ptau,1,"
+            if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
+          fi
+          run_case "$use_path" "$display_base" "--naive" "$tau" 1 "" "$ml" || true
+        done
+      else
         if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
           ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
           key="$display_base,naive,$ptau,1,"
           if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
         fi
-        run_case "$use_path" "$display_base" "--naive" "$tau" 1 "" "$ml" || true
-      done
-    else
-      if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
-        ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
-        key="$display_base,naive,$ptau,1,"
-        if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
+        run_case "$use_path" "$display_base" "--naive" "$tau" 1 "" "" || true
       fi
-      run_case "$use_path" "$display_base" "--naive" "$tau" 1 "" "" || true
-    fi
-  done
+    done
+  fi
 
   # optimized: vary tau, threads, maxbuf; sweep memlimits if provided
-  for tau in "${TAUS[@]}"; do
-    for t in "${THREADS[@]}"; do
-      for mb in "${MAXBUFS[@]}"; do
-        if [[ ${#MEMLIMITS[@]} -gt 0 ]]; then
-          for ml in "${MEMLIMITS[@]}"; do
+  if has_impl opt; then
+    for tau in "${TAUS[@]}"; do
+      for t in "${THREADS[@]}"; do
+        for mb in "${MAXBUFS[@]}"; do
+          if [[ ${#MEMLIMITS[@]} -gt 0 ]]; then
+            for ml in "${MEMLIMITS[@]}"; do
+              if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
+                ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
+                key="$display_base,opt,$ptau,$t,$mb"
+                if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
+              fi
+              run_case "$use_path" "$display_base" "--opt" "$tau" "$t" "$mb" "$ml" || true
+            done
+          else
             if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
               ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
               key="$display_base,opt,$ptau,$t,$mb"
               if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
             fi
-            run_case "$use_path" "$display_base" "--opt" "$tau" "$t" "$mb" "$ml" || true
-          done
-        else
-          if [[ "$SKIP_EXISTING" -eq 1 && -f "$KEYS_FILE" ]]; then
-            ptau="$tau"; [[ "$tau" == "inf" || "$tau" == "INF" ]] && ptau="-1"
-            key="$display_base,opt,$ptau,$t,$mb"
-            if grep -Fxq -- "$key" "$KEYS_FILE"; then vprint "Skip existing: $key"; continue; fi
+            run_case "$use_path" "$display_base" "--opt" "$tau" "$t" "$mb" "" || true
           fi
-          run_case "$use_path" "$display_base" "--opt" "$tau" "$t" "$mb" "" || true
-        fi
+        done
       done
     done
-  done
+  fi
 
   # Per-file cleanup (only remove if created by us; TMP_DIR is removed by trap)
   if [[ -n "$cached_created" && -f "$cached_created" ]]; then

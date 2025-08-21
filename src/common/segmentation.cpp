@@ -41,7 +41,7 @@ void GraphSegmenterFH::run(std::vector<SegEdge>& edges) {
 }
 
 double GraphSegmenterFH::gate(unsigned r) const {
-    const double inv_min = std::isinf(min_sim_[r]) ? 0.0 : (1.0 / min_sim_[r]);
+    const double inv_min = (min_sim_[r] == std::numeric_limits<double>::infinity()) ? 0.0 : (1.0 / min_sim_[r]);
     const double tau = k_ / static_cast<double>(comp_size_[r]);
     const double denom = inv_min + tau;
     return (denom == 0.0) ? std::numeric_limits<double>::infinity() : (1.0 / denom);

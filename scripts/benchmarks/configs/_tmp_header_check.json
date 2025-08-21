@@ -1,0 +1,9 @@
+{
+  "out_dir": "scripts/benchmarks/out",
+  "bench_dir": "benchmarks",
+  "files": { "reuse_csv": "scripts/benchmarks/out/_tmp_empty_reuse.csv" },
+  "algorithms": [
+    { "name": "vig_info", "skip_existing": true },
+    { "name": "segmentation", "skip_existing": true }
+  ]
+}

@@ -19,3 +19,5 @@ Thumbs.db
 *.ipch
 *.user
 *.log
+
+.fake

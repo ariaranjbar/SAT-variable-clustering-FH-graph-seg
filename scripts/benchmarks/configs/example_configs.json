@@ -1,0 +1,22 @@
+{
+  "out_dir": "scripts/benchmarks/out",
+  "bench_dir": "benchmarks",
+  "files": { "count": 3 },
+  "algorithms": [
+    {
+      "name": "cnf_info",
+      "parameters": { "no_compact_flag": ["", "--no-compact"], "no_normalize_flag": ["", "--no-normalize"] },
+      "skip_existing": true
+    },
+    {
+      "name": "vig_info",
+      "parameters": { "impl": ["naive","opt"], "tau": [10,50,"inf"], "threads": [1,2,4], "maxbuf": [50000000,100000000] },
+      "skip_existing": true
+    },
+    {
+      "name": "segmentation",
+      "parameters": { "impl": ["opt"], "tau": [10,50,"inf"], "k": [25,50,100], "threads": [10], "maxbuf": [50000000] },
+      "skip_existing": true
+    }
+  ]
+}

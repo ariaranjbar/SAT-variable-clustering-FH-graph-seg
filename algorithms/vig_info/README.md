@@ -25,3 +25,17 @@ Output fields include: vars, edges, parse_sec, vig_build_sec, total_sec, impl, t
 vig_info -i algorithms/cnf_info/sample.cnf --tau 3 --opt -t 2
 cat algorithms/cnf_info/sample.cnf | vig_info -i - --tau inf --naive
 ```
+
+## Benchmark runners
+
+You can sweep many files and configurations using the benchmark runners in `scripts/benchmarks/`.
+
+- Python (recommended):
+
+```bash
+python3 scripts/benchmarks/bench_runner.py vig_info -n 5 \
+  --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
+  --skip-existing -v
+```
+
+- Bash (legacy): `scripts/benchmarks/run_vig_info_random.sh -n 5`.

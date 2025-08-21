@@ -25,12 +25,12 @@ On multi-config generators (e.g., MSVC), pass `--config Release` to the build st
 ## Algorithms
 
 - `cnf_info` — Prints basic info about a DIMACS CNF file and previews a few clauses.
-   - Usage: `cnf_info --input <file.cnf|-> [--no-compact]`
-   - Legacy: `cnf_info <file.cnf|-> [no-compact]`
+  - Usage: `cnf_info --input <file.cnf|-> [--no-compact]`
+  - Legacy: `cnf_info <file.cnf|-> [no-compact]`
 
 - `vig_info` — Builds the Variable Interaction Graph (VIG) and reports summary stats.
-   - Usage: `vig_info -i <file.cnf|-> [--tau N|inf] [--naive|--opt] [-t K] [--maxbuf M]`
-   - Defaults: `--opt`, `--tau inf`, `-t 0(auto)`, `--maxbuf 50,000,000`
+  - Usage: `vig_info -i <file.cnf|-> [--tau N|inf] [--naive|--opt] [-t K] [--maxbuf M]`
+  - Defaults: `--opt`, `--tau inf`, `-t 0(auto)`, `--maxbuf 50,000,000`
 
 See per-algorithm READMEs under `algorithms/<name>/README.md` for details and examples.
 
@@ -42,4 +42,24 @@ Run smoke tests with CTest after building:
 
 ## Benchmarks
 
-The script `scripts/benchmarks/run_vig_info_random.sh` runs `vig_info` across random CNF inputs, appending metrics to `scripts/benchmarks/out/results.csv`. It supports streaming decompression for `.xz` inputs and cleans up per-run logs on success (retains logs when failures occur or no summary is parsed). CSV uses `total_sec` as the runtime metric and may include component timings (`parse_sec`, `vig_build_sec`). See its README for usage.
+Use the Python runner to sweep algorithms across random CNF inputs and append metrics to CSVs in `scripts/benchmarks/out/`.
+
+Quick examples (after building):
+
+```bash
+python3 scripts/benchmarks/bench_runner.py vig_info -n 5 \
+  --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
+  --skip-existing -v
+
+python3 scripts/benchmarks/bench_runner.py segmentation -n 5 \
+  --implementations naive,opt --taus 3,5,10,inf --ks 25,50,100 --threads 1,2,4 --maxbufs 50000000,100000000 \
+  --skip-existing -v
+```
+
+You can also run batch configs:
+
+```bash
+scripts/benchmarks/bench_runner.py config --file scripts/benchmarks/configs/example_configs.json -v
+```
+
+Algorithms are defined once in `scripts/benchmarks/configs/algorithms.json` (binary discovery, command template, validated parameters, CSV schema). This allows adding new tools or tweaking mappings without changing Python code. Legacy bash helpers remain available; see `scripts/benchmarks/README.md` for details.

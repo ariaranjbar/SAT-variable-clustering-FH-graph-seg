@@ -65,7 +65,6 @@ int main(int argc, char** argv) {
                         << " parse_sec=" << sec_parse
                         << " vig_build_sec=" << sec_build
                         << " total_sec=" << sec_total
-                        << " time_sec=" << sec_total
                         << " impl=" << (use_naive ? "naive" : "opt")
                         << " tau=" << (tau == std::numeric_limits<unsigned>::max() ? -1 : (int)tau)
                         << " threads=" << (use_naive ? 1 : (threads == 0 ? -1 : (int)threads))

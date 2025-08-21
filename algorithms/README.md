@@ -11,3 +11,7 @@
 
 3. Implement a small `main.cpp` that accepts minimal CLI args and prints results and timing.
 4. Reconfigure/build to produce the binary.
+
+## Registering in the benchmark runner
+
+Add an entry to `scripts/benchmarks/configs/algorithms.json` to make your tool available as a subcommand of the Python runner. Define binary discovery hints, the command template, parameter schema (with validation), and CSV mapping. See existing entries (e.g., `vig_info`, `segmentation`) for a template.
