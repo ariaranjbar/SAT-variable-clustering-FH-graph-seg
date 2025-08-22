@@ -5,7 +5,8 @@ Segments the Variable Interaction Graph (VIG) of a CNF using a Felzenszwalb–Hu
 ## Usage
 
 ```bash
-segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--maxbuf M]
+segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--maxbuf M] 
+             [--graph-out FILE] [--comp-out DIR] [--comp-base NAME]
 ```
 
 - `-i, --input` Path to CNF or `-` for stdin
@@ -15,16 +16,21 @@ segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--max
 - `--opt` Use optimized VIG builder (default)
 - `-t, --threads` Threads for optimized VIG build (0 = auto)
 - `--maxbuf` Max contributions buffer for optimized VIG build
+- `--graph-out FILE` Write `FILE.node.csv` with `id,component` and `FILE.edges.csv` with `u,v,w`
+- `--comp-out DIR` Write component summary CSV to `DIR/<base>_components.csv`
+- `--comp-base NAME` Override `<base>` for component CSV filename
 
 Defaults: `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`.
 
-Output fields include: vars, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec, impl, threads, agg_memory.
+Output fields include: `vars, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec, impl, threads, agg_memory, keff, gini, pmax, entropyJ`.
 
 ## Examples
 
 ```bash
 segmentation -i algorithms/cnf_info/sample.cnf --tau 3 --k 50 --opt -t 2
 cat algorithms/cnf_info/sample.cnf | segmentation -i - --tau inf --k 25 --naive
+segmentation -i algorithms/cnf_info/sample.cnf --tau inf --k 50 --opt \
+  --graph-out /tmp/sample_seg --comp-out /tmp/components --comp-base sample
 ```
 
 ## Benchmark runners

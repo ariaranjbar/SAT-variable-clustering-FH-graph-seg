@@ -1,79 +1,119 @@
 # Benchmark scripts for algorithms
 
-This folder contains helper scripts to run algorithms on random subsets of the benchmarks in `../../benchmarks` and collect metrics.
+Tools in this folder help you run and visualize experiments over the CNF benchmarks in `../../benchmarks` and collect CSV outputs.
 
-You can use either the Python runner (recommended) or the legacy bash helpers:
+Contents overview:
 
-- Python dynamic runner: `scripts/benchmarks/bench_runner.py <algo> ...` with algorithms defined once in `configs/algorithms.json` (auto-discovered as CLI subcommands).
-- Bash helpers (legacy):
-  - `run_vig_info_random.sh` — runs `vig_info` on N random CNFs; writes `out/vig_info_results.csv`.
-  - `run_segmentation_random.sh` — runs `segmentation` on N random CNFs; writes `out/segmentation_results.csv`.
+- `bench_runner.py` — registry-driven runner for batch experiments (recommended)
+- `plot.sh` — convenience wrapper to set up a Conda env and generate plots/visualizations
+- `plot_vig_info_results.py` — make plots from `vig_info_results.csv`
+- `plot_segmentation_results.py` — make plots from `segmentation_results.csv`
+- `visualize_graph.py` — render `.node.csv`/`.edges.csv` graph files to an image
+- `generate_and_visualize_graph.py` — generate graph CSVs via binaries and auto-render images
+- `configs/` — algorithms registry and config examples
+- `environment.yml` — optional Python environment for plotting and visualization
+- `lib_bench.sh` — tiny bash helpers (verbose logging, portable shuffling)
 
-Quick start:
+## 1) Batch runner (recommended)
+
+Runs algorithms defined in `configs/algorithms.json` as first-class CLI subcommands. Handles binary discovery, parameter sweeps, input selection, CSV writing, and log management.
 
 ```bash
-# After building the project, e.g., cmake -S . -B build && cmake --build build -j
-
-# Python runner (registry-driven): runs vig_info with sweeps; --bin optional (auto-discovery)
+# Examples (after building binaries under build/)
 python3 scripts/benchmarks/bench_runner.py vig_info -n 5 \
   --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
   --skip-existing -v
 
-# Segmentation via Python runner
 python3 scripts/benchmarks/bench_runner.py segmentation -n 5 \
-  --implementations naive,opt --taus 3,5,10,inf --ks 25,50,100 --threads 1,2,4 --maxbufs 50000000,100000000 \
+  --implementations opt --taus 3,5,10,inf --ks 25,50,100 --threads 1,2,4 \
   --skip-existing -v
-
-# Legacy bash (optional)
-scripts/benchmarks/run_vig_info_random.sh -n 5 --bin build/algorithms/vig_info/vig_info \
-  --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 --implementations opt
-scripts/benchmarks/run_segmentation_random.sh -n 5 --bin build/algorithms/segmentation/segmentation \
-  --taus 3,5,10,inf --ks 25,50,100 --threads 1,2,4 --maxbufs 50000000,100000000
 ```
 
 Notes:
 
-- Python runner auto-discovers binaries based on the registry; `--bin` can override.
-- `--implementations naive,opt` lets you restrict runs; using only `opt` is typical when sweeping threads/maxbuf.
-- Requires `xz` for streaming decompression of `.xz` inputs.
-- CSV columns:
-  - VIG: `file,impl,tau,threads,maxbuf,memlimit_mb,vars,edges,total_sec,parse_sec,vig_build_sec,agg_memory`.
-    - total_sec is the end-to-end runtime of vig_info
-    - parse_sec and vig_build_sec are optional component timings when the tool reports them
-  - Segmentation: `file,impl,tau,k,threads,maxbuf,memlimit_mb,vars,edges,comps,keff,gini,pmax,entropyJ,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
-    - keff, gini, pmax, entropyJ come from `thesis/comp_metrics.hpp` and summarize component balance
-    - seg_sec is the segmentation phase time; others as above
-- Logs are cleaned up on successful runs and kept only on failures or when no summary could be parsed.
-
-Implementation notes:
-
-- Common helpers live in `lib_bench.sh` and are sourced by both scripts to avoid duplication (verbose logging and portable shuffling).
-
-Tau semantics:
-
-- `tau` is the maximum clause size included. Clauses with size > tau are discarded.
-- Use `tau >= 3` or `inf`. The runner enforces constraints via the registry schema.
-
-## Config-driven mode
-
-You can run fully configurable sweeps via a JSON/YAML file (minimal config using registry schema):
+- Binaries are auto-discovered from `configs/algorithms.json` (`build/...` paths) or by name; use `--bin` to override.
+- `.xz` inputs are streamed via `xz -dc` when present; otherwise files are read directly.
+- CSV shapes and required keys are declared per algorithm in the registry (see `configs/algorithms.json`).
+- Config mode allows multiple algorithms and richer overrides:
 
 ```bash
-scripts/benchmarks/bench_runner.py config --file scripts/benchmarks/configs/example_configs.json -v
+python3 scripts/benchmarks/bench_runner.py config --file scripts/benchmarks/configs/example_configs.json -v
 ```
 
-The config uses the registry’s command, CSV schema, and parameter definitions by default; you only override values you want to sweep. It supports conditions (from the registry), memlimit sweeps, skip-existing, and file reuse. See `scripts/benchmarks/configs/README.md` for details.
+Tau semantics: `tau` caps clause size; clauses larger than `tau` are ignored. Use integer ≥ 2 or `inf`.
 
-### Dynamic algorithm registry (define once, reuse via CLI)
+## 2) Plotting and visualization
 
-- Define algorithms in `scripts/benchmarks/configs/algorithms.json` to register them as subcommands.
-- The registry holds binary discovery, command templates, parameter schemas (with validation), and CSV shapes.
-- Example:
+### plot.sh (wrapper)
+
+Creates/updates a Conda env (`thesis-bench`), installs Python deps as needed, then runs:
+
+- VIG plots to `scripts/benchmarks/out/vig_info_plots`
+- Segmentation plots to `scripts/benchmarks/out/segmentation_plots`
+- Graph image renders for any `out/graphs/*(node|nodes).csv` + `*.edges.csv` pairs
+
+Usage:
 
 ```bash
-python3 scripts/benchmarks/bench_runner.py vig_info -n 5 \
-  --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
-  --skip-existing --dry-run -v
+scripts/benchmarks/plot.sh        # create env if needed and plot
+scripts/benchmarks/plot.sh --update  # update env from environment.yml before plotting
 ```
 
-This lets you add or update algorithms without changing Python code.
+### plot_vig_info_results.py
+
+Generate heatmaps/lines from `vig_info_results.csv` (columns as declared in the registry).
+
+```bash
+python3 scripts/benchmarks/plot_vig_info_results.py \
+  --csv scripts/benchmarks/out/vig_info_results.csv \
+  --outdir scripts/benchmarks/out/vig_info_plots \
+  --impl opt   # optional filter
+```
+
+### plot_segmentation_results.py
+
+Generate heatmaps over `tau × k` and optional balance metrics.
+
+```bash
+python3 scripts/benchmarks/plot_segmentation_results.py \
+  --csv scripts/benchmarks/out/segmentation_results.csv \
+  --outdir scripts/benchmarks/out/segmentation_plots
+```
+
+### visualize_graph.py
+
+Render graph CSVs to an image. Accepts `--nodes` (`id[,component]`) and `--edges` (`u,v,w`).
+
+```bash
+python3 scripts/benchmarks/visualize_graph.py \
+  --nodes scripts/benchmarks/out/graphs/graph_output.seg.node.csv \
+  --edges scripts/benchmarks/out/graphs/graph_output.seg.edges.csv \
+  --out   scripts/benchmarks/out/graphs/graph_output.seg.png \
+  --title "Segmentation"
+```
+
+### generate_and_visualize_graph.py
+
+Use the built binaries to produce `.node.csv`/`.edges.csv` for both segmentation and VIG, then render PNGs.
+
+```bash
+python3 scripts/benchmarks/generate_and_visualize_graph.py benchmarks/your.cnf.xz
+```
+
+Outputs are written to `scripts/benchmarks/out/graphs/graph_output.{seg|vig}.*`.
+
+## 3) Environment
+
+Optional Conda environment for plotting and visualization:
+
+```bash
+conda env create -f scripts/benchmarks/environment.yml
+conda activate thesis-bench
+```
+
+## 4) CSV columns (reference)
+
+- VIG results: `file,impl,tau,threads,maxbuf,memlimit_mb,vars,edges,total_sec,parse_sec,vig_build_sec,agg_memory`.
+- Segmentation results: `file,impl,tau,k,threads,maxbuf,memlimit_mb,vars,edges,comps,keff,gini,pmax,entropyJ,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
+
+Logs are cleaned up on success and kept only on failures or when no summary could be parsed.
