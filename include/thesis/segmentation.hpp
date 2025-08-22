@@ -8,19 +8,16 @@
 #include <vector>
 
 #include "thesis/disjoint_set.hpp"
+#include "thesis/vig.hpp" // for Edge (u,v,w)
 
 namespace thesis {
 
 // Edge with similarity weight (larger = more similar)
-struct SegEdge {
-    unsigned u; // 0-based
-    unsigned v; // 0-based
-    double w;   // similarity
-};
+using SegEdge = thesis::Edge;
 
-// Graph segmentation based on a Felzenszwalb-Huttenlocher style predicate.
+// Graph segmentation based on Felzenszwalb-Huttenlocher predicate.
 // Uses union-find with union-by-rank and path compression.
-// Gate(C) = 1 / ( 1/min_sim(C) + k/|C| ), with 1/inf := 0.
+// Gate(C) = max_dist(C) + k/|C|
 class GraphSegmenterFH {
 public:
     // Construct a segmenter for n nodes and parameter k.
@@ -45,15 +42,15 @@ public:
     // Size of the component whose representative is r.
     unsigned comp_size(unsigned r) const { return comp_size_[r]; }
 
-    // Minimum similarity observed within the component (representative r).
-    double comp_min_similarity(unsigned r) const { return min_sim_[r]; }
+    // Minimum similarity weight observed within the component (representative r).
+    double comp_min_weight(unsigned r) const { return 1.0/max_dist_[r]; }
 
 private:
     double gate(unsigned r) const;
 
     DisjointSets dsu_{};
     std::vector<unsigned> comp_size_{};
-    std::vector<double> min_sim_{};
+    std::vector<double> max_dist_{};
     double k_ = 50.0;
 };
 

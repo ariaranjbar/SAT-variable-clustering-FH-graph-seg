@@ -2,3 +2,6 @@ channels:
   - conda-forge
   - defaults
 channel_priority: flexible
+default_channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r

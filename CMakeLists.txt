@@ -41,6 +41,8 @@ add_library(thesis_common STATIC
   src/common/disjoint_set.cpp
   src/common/segmentation.cpp
   src/common/vig.cpp
+  src/common/csv.cpp
+  src/common/comp_metrics.cpp
 )
 add_library(thesis::common ALIAS thesis_common)
 

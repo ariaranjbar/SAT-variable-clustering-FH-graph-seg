@@ -77,7 +77,9 @@
         "--k", "${k}",
         "--${impl}",
         "-t", "${threads}",
-        "--maxbuf", "${maxbuf}"
+  "--maxbuf", "${maxbuf}",
+  "--comp-out", "${comp_out_dir}",
+  "--comp-base", "${comp_base}"
       ],
       "base_params": { "threads": 1 },
       "params": [
@@ -87,13 +89,18 @@
   {"name": "threads", "cli": "--threads", "type": "int", "default": [1,2,4], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Threads for opt"},
   {"name": "maxbuf", "cli": "--maxbufs", "type": "int", "default": [50000000], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Max buffer for opt"}
       ],
+      "auto_params": [
+        { "name": "comp_out_dir", "template": "components/${algo}/tau_${tau}/k_${k}", "join_out_dir": true },
+        { "name": "comp_base", "template": "${file_root}", "join_out_dir": false }
+      ],
       "csv": {
         "path": "segmentation_results.csv",
         "header": [
           "file","impl","tau","k","threads","maxbuf","memlimit_mb",
-          "vars","edges","comps","total_sec","parse_sec","vig_build_sec","seg_sec","agg_memory"
+          "vars","edges","comps","keff","gini","pmax","entropyJ",
+          "total_sec","parse_sec","vig_build_sec","seg_sec","agg_memory"
         ],
-        "required_keys": ["vars","edges","comps","k","total_sec","impl","threads","agg_memory"],
+        "required_keys": ["vars","edges","comps","keff","gini","pmax","entropyJ","k","total_sec","impl","threads","agg_memory"],
         "key_cols": [0,1,2,3,4,5]
       }
     }

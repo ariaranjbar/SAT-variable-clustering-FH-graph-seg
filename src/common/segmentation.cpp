@@ -8,7 +8,7 @@ GraphSegmenterFH::GraphSegmenterFH(unsigned n, double k) { reset(n, k); }
 void GraphSegmenterFH::reset(unsigned n, double k) {
     dsu_.reset(n);
     comp_size_.assign(n, 1);
-    min_sim_.assign(n, std::numeric_limits<double>::infinity());
+    max_dist_.assign(n, 0);
     k_ = k;
 }
 
@@ -20,31 +20,25 @@ void GraphSegmenterFH::run(std::vector<SegEdge>& edges) {
         unsigned a = dsu_.find(e.u);
         unsigned b = dsu_.find(e.v);
         if (a == b) continue;
+        const double connection_distance = 1/e.w;
         const double gate_a = gate(a);
         const double gate_b = gate(b);
-        if (e.w >= (gate_a > gate_b ? gate_a : gate_b)) {
+        if (connection_distance <= (gate_a < gate_b ? gate_a : gate_b)) {
             // unite returns new representative; we need to merge sizes and min-sim
-            unsigned ra = a, rb = b;
             // Determine which representative will be the parent by consulting union-by-rank inside dsu
-            // We can't peek rank; instead, call unite and map old to new rep
             unsigned r = dsu_.unite(a, b);
-            unsigned child = (r == a ? b : a);
             comp_size_[r] = comp_size_[a] + comp_size_[b];
-            // Track minimal similarity within the component
-            double prev_min = std::min(min_sim_[a], min_sim_[b]);
-            min_sim_[r] = std::min(prev_min, e.w);
-            // Optionally clear child's stats (not necessary functionally)
-            // comp_size_[child] = 0; // keep for potential debug
-            // min_sim_[child] = min_sim_[r];
+            // Track maximum distance within the component (use connection_distance)
+            double prev_max = std::max(max_dist_[a], max_dist_[b]);
+            max_dist_[r] = std::max(prev_max, connection_distance);
         }
     }
 }
 
 double GraphSegmenterFH::gate(unsigned r) const {
-    const double inv_min = (min_sim_[r] == std::numeric_limits<double>::infinity()) ? 0.0 : (1.0 / min_sim_[r]);
     const double tau = k_ / static_cast<double>(comp_size_[r]);
-    const double denom = inv_min + tau;
-    return (denom == 0.0) ? std::numeric_limits<double>::infinity() : (1.0 / denom);
+    return max_dist_[r] + tau;
+
 }
 
 } // namespace thesis

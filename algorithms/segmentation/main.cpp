@@ -1,10 +1,15 @@
 #include <iostream>
 #include <string>
+#include <filesystem>
+#include <vector>
+#include <limits>
 #include "thesis/cli.hpp"
 #include "thesis/cnf.hpp"
 #include "thesis/vig.hpp"
 #include "thesis/segmentation.hpp"
 #include "thesis/timer.hpp"
+#include "thesis/csv.hpp"
+#include "thesis/comp_metrics.hpp"
 
 int main(int argc, char** argv) {
     using namespace thesis;
@@ -15,8 +20,11 @@ int main(int argc, char** argv) {
     cli.add_option(OptionSpec{.longName = "k", .shortName = '\0', .type = ArgType::String, .valueName = "K", .help = "Segmentation parameter k (double)", .required = false, .defaultValue = "50.0"});
     cli.add_option(OptionSpec{.longName = "maxbuf", .shortName = '\0', .type = ArgType::Size, .valueName = "M", .help = "VIG optimized builder max contributions buffer", .required = false, .defaultValue = "50000000"});
     cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "K", .help = "Threads for optimized VIG build (0=auto)", .required = false, .defaultValue = "0"});
+    cli.add_option(OptionSpec{.longName = "comp-out", .shortName = '\0', .type = ArgType::String, .valueName = "DIR", .help = "Optional dir to write components CSV (auto-named: <cnf>_components.csv)", .required = false, .defaultValue = ""});
+    cli.add_option(OptionSpec{.longName = "comp-base", .shortName = '\0', .type = ArgType::String, .valueName = "NAME", .help = "Optional base name for components file (overrides CNF-derived base)", .required = false, .defaultValue = ""});
     cli.add_flag("naive", '\0', "Use naive VIG builder");
     cli.add_flag("opt", '\0', "Use optimized VIG builder (default)");
+    cli.add_option(OptionSpec{.longName = "graph-out", .shortName = '\0', .type = ArgType::String, .valueName = "FILE", .help = "Write graph CSVs to FILE.node.csv and FILE.edges.csv", .required = false, .defaultValue = ""});
 
     bool proceed = true;
     try {
@@ -60,18 +68,99 @@ int main(int argc, char** argv) {
     }
     const double sec_build = t_build.sec();
 
-    // Convert VIG edges to segmentation edges
-    std::vector<SegEdge> sedges;
-    sedges.reserve(g.edges.size());
-    for (const auto& e : g.edges) {
-        sedges.push_back(SegEdge{e.u, e.v, e.w});
-    }
-
     Timer t_seg;
     GraphSegmenterFH seg(g.n, k);
-    seg.run(sedges);
+    seg.run(g.edges);
     const double sec_seg = t_seg.sec();
     const double sec_total = t_total.sec();
+
+    // Compute metrics once
+    auto sizes = thesis::component_sizes(static_cast<uint32_t>(g.n), [&](uint32_t v){ return seg.component_no_compress(v); });
+    thesis::CompSummary cs = thesis::summarize_components(sizes);
+
+    // Optional: write full graph (nodes with component labels, then edges) to files
+    if (cli.provided("graph-out")) {
+        const std::string graph_path = cli.get_string("graph-out");
+        if (graph_path.empty()) {
+            std::cerr << "--graph-out requires a file path\n";
+            return 3;
+        }
+        const std::string nodes_path = graph_path + ".node.csv";
+        const std::string edges_path = graph_path + ".edges.csv";
+
+        CSVWriter ncsv(nodes_path);
+        if (!ncsv.is_open()) {
+            std::cerr << "Failed to open nodes output file: " << nodes_path << "\n";
+            return 3;
+        }
+        CSVWriter ecsv(edges_path);
+        if (!ecsv.is_open()) {
+            std::cerr << "Failed to open edges output file: " << edges_path << "\n";
+            return 3;
+        }
+
+        // Nodes CSV: id,component
+        ncsv.header("id", "component");
+        for (unsigned v = 0; v < g.n; ++v) {
+            unsigned r = seg.component_no_compress(v);
+            ncsv.row(v, r);
+        }
+
+        // Edges CSV: u,v,w
+        ecsv.header("u", "v", "w");
+        for (const auto& e : g.edges) {
+            ecsv.row(e.u, e.v, e.w);
+        }
+    }
+
+    // Optional: write components CSV with size and minimum internal weight per component
+    if (cli.provided("comp-out")) {
+        const std::string comp_out_dir = cli.get_string("comp-out");
+        std::error_code ec;
+        std::filesystem::path outdir(comp_out_dir);
+        if (comp_out_dir.empty()) {
+            std::cerr << "--comp-out requires a directory path\n";
+            return 3;
+        }
+        if (!std::filesystem::exists(outdir, ec)) {
+            if (!std::filesystem::create_directories(outdir, ec)) {
+                std::cerr << "Failed to create output directory: " << comp_out_dir << "\n";
+                return 3;
+            }
+        } else if (!std::filesystem::is_directory(outdir, ec)) {
+            std::cerr << "--comp-out path is not a directory: " << comp_out_dir << "\n";
+            return 3;
+        }
+
+        // Derive base name from input CNF path unless overridden by --comp-base
+        std::string base_name = cli.get_string("comp-base");
+        if (base_name.empty()) {
+            if (path != "-") {
+                std::filesystem::path p(path);
+                p = p.filename();
+                while (p.has_extension()) p = p.stem();
+                base_name = p.string();
+                if (base_name.empty()) base_name = "cnf";
+            } else {
+                base_name = "stdin";
+            }
+        }
+        const std::filesystem::path out_file = outdir / (base_name + "_components.csv");
+
+        CSVWriter ofs(out_file.string());
+        if (!ofs.is_open()) {
+            std::cerr << "Failed to open components output file: " << out_file.string() << "\n";
+            return 3;
+        }
+        ofs.header("component_id", "size", "min_internal_weight");
+        std::vector<char> seen(g.n, 0);
+        for (unsigned v = 0; v < g.n; ++v) {
+            unsigned r = seg.component_no_compress(v);
+            if (seen[r]) continue;
+            seen[r] = 1;
+            ofs.row(r, seg.comp_size(r), seg.comp_min_weight(r));
+        }
+    }
 
     std::cout << "vars=" << g.n
               << " edges=" << g.edges.size()
@@ -85,6 +174,10 @@ int main(int argc, char** argv) {
               << " impl=" << (use_naive ? "naive" : "opt")
               << " threads=" << (use_naive ? 1 : (threads == 0 ? -1 : (int)threads))
               << " agg_memory=" << g.aggregation_memory
+              << " keff=" << cs.keff
+              << " gini=" << cs.gini
+              << " pmax=" << cs.pmax
+              << " entropyJ=" << cs.entropyJ
               << "\n";
     return 0;
 }

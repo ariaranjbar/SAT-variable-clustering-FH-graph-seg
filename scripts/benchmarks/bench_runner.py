@@ -389,6 +389,86 @@ def _format_cmd(cmd_template: List[str], params: Dict[str, str], infile: Path, b
     return tokens
 
 
+def _subst_template(tmpl: str, vars_map: Dict[str, str]) -> str:
+    s = str(tmpl)
+    for k, v in vars_map.items():
+        s = s.replace(f"${{{k}}}", str(v))
+    return s
+
+
+def _compute_auto_params(algo_cfg: dict, combo: Dict[str, str], out_dir: Path, algo_name: str, file_path: Optional[Path]) -> Dict[str, str]:
+    """Compute algorithm-specific auto-generated parameters.
+    Schema per entry:
+      {"name": "param_name", "template": "relative/or/absolute/with/${vars}", "join_out_dir": true|false}
+    Vars available: all keys in combo, plus algo, out_dir, file, file_stem.
+    When join_out_dir is true, final path = out_dir / substituted(template).
+    """
+    res: Dict[str, str] = {}
+    auto_list = algo_cfg.get("auto_params", []) or []
+    if not isinstance(auto_list, list):
+        return res
+    for ap in auto_list:
+        if not isinstance(ap, dict):
+            continue
+        name = ap.get("name")
+        tmpl = ap.get("template") or ap.get("path_template")
+        if not name or not tmpl:
+            continue
+        vars_map: Dict[str, str] = {}
+        vars_map.update(combo)
+        # Derive file_root (strip all suffixes) for original file
+        file_root = ""
+        if file_path is not None:
+            p = file_path.name
+            # emulate Path.stem repeatedly
+            base = Path(p)
+            while True:
+                s = base.suffix
+                if not s:
+                    break
+                base = Path(base.stem)
+            file_root = base.name
+
+        vars_map.update({
+            "algo": str(algo_name),
+            "out_dir": str(out_dir),
+            "file": "" if file_path is None else file_path.name,
+            "file_stem": "" if file_path is None else file_path.stem,
+            "file_root": file_root,
+        })
+        val = _subst_template(str(tmpl), vars_map)
+        if bool(ap.get("join_out_dir", False)):
+            val = str(out_dir / val)
+        res[name] = val
+    return res
+
+
+def _slug_value(val: str, max_len: int = 80) -> str:
+    """Make a value safe for filenames: replace path separators and other unsafe chars.
+    Also clamp length to avoid overlong filenames.
+    """
+    s = str(val)
+    # Replace any non-alnum and not in a small safe set with '_'
+    s = re.sub(r"[^A-Za-z0-9._+-]", "_", s)
+    if len(s) > max_len:
+        s = s[:max_len]
+    return s
+
+
+def _params_tag(params: Dict[str, str], exclude_keys: Optional[List[str]] = None) -> str:
+    """Build a compact, filesystem-safe tag from params for log filenames.
+    exclude_keys: parameter names to skip (e.g., long path-like values).
+    """
+    exclude = set(exclude_keys or [])
+    parts: List[str] = []
+    for k in sorted(params.keys()):
+        if k in exclude:
+            continue
+        v = params[k]
+        parts.append(f"{k}{_slug_value(v)}")
+    return ".".join(parts)
+
+
 def _parse_required_keys(lines: List[str], required: List[str]) -> Optional[Dict[str, str]]:
     m = parse_summary_lines(lines)
     return m if all(k in m for k in required) else None
@@ -550,8 +630,8 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                 w = csv.writer(f)
                 w.writerow(header)
 
-        # Iterate files and runs
-        for fpath in sel_files:
+    # Iterate files and runs
+    for fpath in sel_files:
             display_base = fpath.name
             combos = _product_sweep(param_specs, base_params)
 
@@ -571,6 +651,9 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
             for combo in combos:
                 ml_list: List[Optional[int]] = memlimits if memlimits else [None]
                 for ml in ml_list:
+                    # compute auto-generated params and merge into a derived combo
+                    aut = _compute_auto_params(reg_algo, combo, out_dir, name, fpath)
+                    combo2 = {**combo, **aut}
                     # Pre-check skip-existing if keys provided
                     if keys is not None:
                         key_cols = csv_obj.get("key_cols")
@@ -582,7 +665,7 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                             elif col == "memlimit_mb":
                                 pre_vals.append("" if ml is None else str(ml))
                             else:
-                                pre_vals.append(combo.get(col, ""))
+                                pre_vals.append(combo2.get(col, ""))
                         for idx in key_cols:
                             if pre_vals[idx] == "":
                                 unresolved = True
@@ -594,11 +677,12 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                                 continue
 
                     use_path = cached_path if cached_path is not None else fpath
-                    cmd = _format_cmd([str(x) for x in cmd_template], combo, use_path, bin_path=bin_path)
+                    cmd = _format_cmd([str(x) for x in cmd_template], combo2, use_path, bin_path=bin_path)
                     stamp = time.strftime("%Y%m%d-%H%M%S")
-                    params_tag = ".".join(f"{k}{combo[k]}" for k in sorted(combo.keys()))
+                    params_tag = _params_tag(combo2, exclude_keys=["comp_out_dir", "comp_base"]) 
                     ml_tag = f".mem{ml}mb" if ml is not None else ""
-                    log = out_dir / f"{display_base}.{name}.{params_tag}{ml_tag}.{stamp}.log"
+                    safe_base = _slug_value(display_base, max_len=80)
+                    log = out_dir / f"{safe_base}.{name}.{params_tag}{ml_tag}.{stamp}.log"
 
                     rc, lines = run_with_streaming(cmd, use_path, log, verbose, memlimit_mb=ml)
                     ok = False
@@ -612,7 +696,7 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                                 elif col == "memlimit_mb":
                                     row_vals.append("" if ml is None else str(ml))
                                 else:
-                                    row_vals.append(m.get(col, combo.get(col, "")))
+                                    row_vals.append(m.get(col, combo2.get(col, "")))
                             if keys is not None:
                                 key_cols = csv_obj.get("key_cols")
                                 key = ",".join(row_vals[i] for i in key_cols)
@@ -834,14 +918,18 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
         for combo in combos:
             memlist: List[Optional[int]] = ns.memlimits if ns.memlimits else [None]
             for ml in memlist:
+                # compute auto-generated params for registry mode
+                aut = _compute_auto_params(algo_cfg, combo, ns.out_dir, algo_name, fpath)
+                combo2 = {**combo, **aut}
                 use_path = cached_path if cached_path is not None else fpath
                 cmd_template: List[str] = [str(x) for x in (algo_cfg.get("cmd_template") or [])]
-                cmd = _format_cmd(cmd_template, combo, use_path, bin_path=bin_path)
+                cmd = _format_cmd(cmd_template, combo2, use_path, bin_path=bin_path)
                 # Log path: include params
                 stamp = time.strftime("%Y%m%d-%H%M%S")
-                params_tag = ".".join(f"{k}{combo[k]}" for k in sorted(combo.keys()))
+                params_tag = _params_tag(combo2, exclude_keys=["comp_out_dir", "comp_base"]) 
                 ml_tag = f".mem{ml}mb" if ml is not None else ""
-                log = ns.out_dir / f"{display_base}.{algo_name}.{params_tag}{ml_tag}.{stamp}.log"
+                safe_base = _slug_value(display_base, max_len=80)
+                log = ns.out_dir / f"{safe_base}.{algo_name}.{params_tag}{ml_tag}.{stamp}.log"
 
                 if ns.dry_run:
                     vprint(True, "RUN:", " ".join(shlex.quote(x) for x in cmd))
@@ -857,7 +945,7 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                         elif col == "memlimit_mb":
                             pre_vals.append("" if ml is None else str(ml))
                         else:
-                            pre_vals.append(combo.get(col, ""))
+                            pre_vals.append(combo2.get(col, ""))
                     if all(pre_vals[i] != "" for i in key_cols):
                         pre_key = ",".join(pre_vals[i] for i in key_cols)
                         if pre_key in keys:
@@ -873,7 +961,7 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                         for col in header:
                             if col == "file": row_vals.append(display_base)
                             elif col == "memlimit_mb": row_vals.append("" if ml is None else str(ml))
-                            else: row_vals.append(m.get(col, combo.get(col, "")))
+                            else: row_vals.append(m.get(col, combo2.get(col, "")))
                         # Post-run skip-existing (safety)
                         if keys is not None:
                             key_cols = csv_cfg.get("key_cols", [])

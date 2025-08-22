@@ -1,10 +1,12 @@
 #include <iostream>
 #include <string>
 #include <limits>
+#include <iomanip>
 #include "thesis/timer.hpp"
 #include "thesis/cli.hpp"
 #include "thesis/cnf.hpp"
 #include "thesis/vig.hpp"
+#include "thesis/csv.hpp"
 
 int main(int argc, char** argv) {
     using namespace thesis;
@@ -15,6 +17,7 @@ int main(int argc, char** argv) {
     cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "K", .help = "Number of worker threads (0=auto)", .required = false, .defaultValue = "0"});
     cli.add_flag("naive", '\0', "Use naive implementation");
     cli.add_flag("opt", '\0', "Use optimized implementation");
+    cli.add_option(OptionSpec{.longName = "graph-out", .shortName = '\0', .type = ArgType::String, .valueName = "FILE", .help = "Write graph CSVs to FILE.node.csv and FILE.edges.csv", .required = false, .defaultValue = ""});
 
     bool proceed = true;
     try {
@@ -59,6 +62,39 @@ int main(int argc, char** argv) {
     }
     const double sec_build = t_build.sec();
     const double sec_total = t_total.sec();
+
+    if (cli.provided("graph-out")) {
+        const std::string graph_path = cli.get_string("graph-out");
+        if (graph_path.empty()) {
+            std::cerr << "--graph-out requires a file path\n";
+            return 3;
+        }
+        const std::string nodes_path = graph_path + ".node.csv";
+        const std::string edges_path = graph_path + ".edges.csv";
+
+        CSVWriter ncsv(nodes_path);
+        if (!ncsv.is_open()) {
+            std::cerr << "Failed to open nodes output file: " << nodes_path << "\n";
+            return 3;
+        }
+        CSVWriter ecsv(edges_path);
+        if (!ecsv.is_open()) {
+            std::cerr << "Failed to open edges output file: " << edges_path << "\n";
+            return 3;
+        }
+
+        // Nodes CSV: id
+        ncsv.header("id");
+        for (unsigned v = 0; v < g.n; ++v) {
+            ncsv.row(v);
+        }
+
+        // Edges CSV: u,v,w
+        ecsv.header("u", "v", "w");
+        for (const auto& e : g.edges) {
+            ecsv.row(e.u, e.v, e.w);
+        }
+    }
 
     std::cout << "vars=" << g.n
                         << " edges=" << g.edges.size()

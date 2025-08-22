@@ -40,7 +40,8 @@ Notes:
   - VIG: `file,impl,tau,threads,maxbuf,memlimit_mb,vars,edges,total_sec,parse_sec,vig_build_sec,agg_memory`.
     - total_sec is the end-to-end runtime of vig_info
     - parse_sec and vig_build_sec are optional component timings when the tool reports them
-  - Segmentation: `file,impl,tau,k,threads,maxbuf,memlimit_mb,vars,edges,comps,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
+  - Segmentation: `file,impl,tau,k,threads,maxbuf,memlimit_mb,vars,edges,comps,keff,gini,pmax,entropyJ,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
+    - keff, gini, pmax, entropyJ come from `thesis/comp_metrics.hpp` and summarize component balance
     - seg_sec is the segmentation phase time; others as above
 - Logs are cleaned up on successful runs and kept only on failures or when no summary could be parsed.
 

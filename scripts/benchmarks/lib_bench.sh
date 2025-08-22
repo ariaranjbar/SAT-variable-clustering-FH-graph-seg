@@ -21,7 +21,7 @@ bench_shuffle_lines() {
   elif command -v shuf >/dev/null 2>&1; then
     shuf
   else
-    # Portable fallback using awk+sort
-    awk 'BEGIN{srand()} {printf("%f\t%s\n", rand(), $0)}' | sort -k1,1g | cut -f2-
+  # Portable fallback using awk+sort (locale-stable numeric sort)
+  LC_ALL=C awk 'BEGIN{srand()} {printf("%f\t%s\n", rand(), $0)}' | LC_ALL=C sort -k1,1g | cut -f2-
   fi
 }
