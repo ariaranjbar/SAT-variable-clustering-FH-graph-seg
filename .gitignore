@@ -21,3 +21,6 @@ Thumbs.db
 *.log
 
 .fake
+
+# Benchmark outputs
+/scripts/benchmarks/out/
