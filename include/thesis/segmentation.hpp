@@ -6,6 +6,7 @@
 #include <limits>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "thesis/disjoint_set.hpp"
 #include "thesis/vig.hpp" // for Edge (u,v,w)
@@ -30,6 +31,17 @@ public:
     // Edges will be sorted descending by weight.
     void run(std::vector<SegEdge>& edges);
 
+    // After run(), compute strongest inter-component edges.
+    // Returns one edge per unordered pair of components (u,v) with maximum similarity weight.
+    // The endpoints u,v are component representatives (roots) at the end of segmentation.
+    // If there is no edge between two components in the input, it won't appear in the result.
+    std::vector<SegEdge> strongest_inter_component_edges() const;
+
+    // Access the non-union edges that connect two different components at the
+    // time they were considered (i.e., potential inter-component connections).
+    // Stored in the same descending order used during segmentation.
+    const std::vector<SegEdge>& inter_component_candidates() const { return inter_comp_candidates_; }
+
     // Accessors
     unsigned node_count() const { return static_cast<unsigned>(comp_size_.size()); }
     unsigned num_components() const { return dsu_.components(); }
@@ -48,10 +60,18 @@ public:
 private:
     double gate(unsigned r) const;
 
+    static inline std::uint64_t pair_key(unsigned a, unsigned b) {
+        if (a > b) std::swap(a, b);
+        return (static_cast<std::uint64_t>(a) << 32) | static_cast<std::uint64_t>(b);
+    }
+
     DisjointSets dsu_{};
     std::vector<unsigned> comp_size_{};
     std::vector<double> max_dist_{};
     double k_ = 50.0;
+    // Non-union edges that were cross-component when processed (descending weight order).
+    // These are candidates for strongest inter-component connections.
+    std::vector<SegEdge> inter_comp_candidates_{};
 };
 
 } // namespace thesis

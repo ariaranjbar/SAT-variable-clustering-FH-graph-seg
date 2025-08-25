@@ -87,13 +87,15 @@ Segment the VIG using a Felzenszwalb–Huttenlocher predicate with union–find.
 
 ```bash
 segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--maxbuf M]
-             [--graph-out FILE] [--comp-out DIR] [--comp-base NAME]
+             [--graph-out DIR] [--comp-out DIR] [--cross-out DIR] [--output-base NAME]
 ```
 
 - `--k`: segmentation parameter (double); higher → fewer merges
 - Optional outputs:
-  - `--graph-out FILE` writes `FILE.node.csv` (`id,component`) and `FILE.edges.csv` (`u,v,w`)
-  - `--comp-out DIR` and `--comp-base NAME` write `DIR/<base>_components.csv` with `component_id,size,min_internal_weight`
+  - `--graph-out DIR` writes `DIR/<base>.node.csv` (`id,component`) and `DIR/<base>.edges.csv` (`u,v,w`)
+  - `--comp-out DIR` writes `DIR/<base>_components.csv` with `component_id,size,min_internal_weight`
+  - `--cross-out DIR` writes `DIR/<base>_cross.csv` with `u,v,w`
+  - `--output-base NAME` sets `<base>`; if omitted, it’s derived from the input filename (stripped extensions) or `stdin`. `--comp-base` is deprecated.
 
 Outputs: `vars, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec, impl, threads, agg_memory, keff, gini, pmax, entropyJ`.
 

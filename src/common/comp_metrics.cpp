@@ -13,7 +13,7 @@ CompSummary summarize_components(const std::vector<uint32_t>& sizes) {
     CompSummary s;
     s.K = static_cast<uint32_t>(sizes.size());
     const uint64_t S64 = std::accumulate(sizes.begin(), sizes.end(), uint64_t{0});
-    s.N = static_cast<uint32_t>(S64 > std::numeric_limits<uint32_t>::max() ? std::numeric_limits<uint32_t>::max() : S64);
+    s.N = S64;
     const double S = static_cast<double>(S64);
 
     if (s.K == 0 || S <= 0.0) {

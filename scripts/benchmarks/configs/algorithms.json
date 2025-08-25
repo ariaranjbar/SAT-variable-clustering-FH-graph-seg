@@ -10,27 +10,84 @@
         "build/vig_info"
       ],
       "cmd_template": [
-        "${bin}", "-i", "${input}",
-        "--tau", "${tau}",
+        "${bin}",
+        "-i",
+        "${input}",
+        "--tau",
+        "${tau}",
         "--${impl}",
-        "-t", "${threads}",
-        "--maxbuf", "${maxbuf}"
+        "-t",
+        "${threads}",
+        "--maxbuf",
+        "${maxbuf}"
       ],
       "base_params": { "threads": 1 },
       "params": [
-  {"name": "impl", "cli": "--implementations", "type": "string", "enum": ["naive","opt"], "default": ["naive","opt"], "help": "Comma list of implementations (naive,opt)"},
-  {"name": "tau", "cli": "--taus", "type": "string", "default": ["3","5","10","inf"], "allow_inf": true, "numeric": "int", "min": 2, "help": "Comma list of taus (>=2 or inf)"},
-  {"name": "threads", "cli": "--threads", "type": "int", "default": [1,2,4], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Threads for opt"},
-  {"name": "maxbuf", "cli": "--maxbufs", "type": "int", "default": [50000000,100000000], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Max buffer for opt"}
+        {
+          "name": "impl",
+          "cli": "--implementations",
+          "type": "string",
+          "enum": ["naive", "opt"],
+          "default": ["naive", "opt"],
+          "help": "Comma list of implementations (naive,opt)"
+        },
+        {
+          "name": "tau",
+          "cli": "--taus",
+          "type": "string",
+          "default": ["3", "5", "10", "inf"],
+          "allow_inf": true,
+          "numeric": "int",
+          "min": 2,
+          "help": "Comma list of taus (>=2 or inf)"
+        },
+        {
+          "name": "threads",
+          "cli": "--threads",
+          "type": "int",
+          "default": [1, 2, 4],
+          "numeric": "int",
+          "min": 1,
+          "when": { "equals": { "key": "impl", "value": "opt" } },
+          "help": "Threads for opt"
+        },
+        {
+          "name": "maxbuf",
+          "cli": "--maxbufs",
+          "type": "int",
+          "default": [50000000, 100000000],
+          "numeric": "int",
+          "min": 1,
+          "when": { "equals": { "key": "impl", "value": "opt" } },
+          "help": "Max buffer for opt"
+        }
       ],
       "csv": {
         "path": "vig_info_results.csv",
         "header": [
-          "file","impl","tau","threads","maxbuf","memlimit_mb",
-          "vars","edges","total_sec","parse_sec","vig_build_sec","agg_memory"
+          "file",
+          "impl",
+          "tau",
+          "threads",
+          "maxbuf",
+          "memlimit_mb",
+          "vars",
+          "edges",
+          "total_sec",
+          "parse_sec",
+          "vig_build_sec",
+          "agg_memory"
         ],
-        "required_keys": ["vars","edges","total_sec","impl","tau","threads","agg_memory"],
-        "key_cols": [0,1,2,3,4]
+        "required_keys": [
+          "vars",
+          "edges",
+          "total_sec",
+          "impl",
+          "tau",
+          "threads",
+          "agg_memory"
+        ],
+        "key_cols": [0, 1, 2, 3, 4]
       }
     },
     {
@@ -43,23 +100,51 @@
         "build/cnf_info"
       ],
       "cmd_template": [
-        "${bin}", "-i", "${input}",
+        "${bin}",
+        "-i",
+        "${input}",
         "${no_compact_flag}",
         "${no_normalize_flag}"
       ],
       "base_params": {},
       "params": [
-        {"name": "no_compact_flag", "cli": "--compact-flags", "type": "string", "enum": ["", "--no-compact"], "default": ["", "--no-compact"], "help": "Values: '' (default compact) or --no-compact (disable compaction)"},
-        {"name": "no_normalize_flag", "cli": "--normalize-flags", "type": "string", "enum": ["", "--no-normalize"], "default": ["", "--no-normalize"], "help": "Values: '' (default normalize) or --no-normalize (disable normalization)"}
+        {
+          "name": "no_compact_flag",
+          "cli": "--compact-flags",
+          "type": "string",
+          "enum": ["", "--no-compact"],
+          "default": ["", "--no-compact"],
+          "help": "Values: '' (default compact) or --no-compact (disable compaction)"
+        },
+        {
+          "name": "no_normalize_flag",
+          "cli": "--normalize-flags",
+          "type": "string",
+          "enum": ["", "--no-normalize"],
+          "default": ["", "--no-normalize"],
+          "help": "Values: '' (default normalize) or --no-normalize (disable normalization)"
+        }
       ],
       "csv": {
         "path": "cnf_info_results.csv",
         "header": [
-          "file", "memlimit_mb",
-          "vars", "clauses", "total_sec", "parse_sec", "compacted", "normalized"
+          "file",
+          "memlimit_mb",
+          "vars",
+          "clauses",
+          "total_sec",
+          "parse_sec",
+          "compacted",
+          "normalized"
         ],
-        "required_keys": ["vars", "clauses", "total_sec", "compacted", "normalized"],
-        "key_cols": [0,1,6,7]
+        "required_keys": [
+          "vars",
+          "clauses",
+          "total_sec",
+          "compacted",
+          "normalized"
+        ],
+        "key_cols": [0, 1, 6, 7]
       }
     },
     {
@@ -72,36 +157,123 @@
         "build/segmentation"
       ],
       "cmd_template": [
-        "${bin}", "-i", "${input}",
-        "--tau", "${tau}",
-        "--k", "${k}",
+        "${bin}",
+        "-i",
+        "${input}",
+        "--tau",
+        "${tau}",
+        "--k",
+        "${k}",
         "--${impl}",
-        "-t", "${threads}",
-  "--maxbuf", "${maxbuf}",
-  "--comp-out", "${comp_out_dir}",
-  "--comp-base", "${comp_base}"
+        "-t",
+        "${threads}",
+        "--maxbuf",
+        "${maxbuf}",
+        "--comp-out",
+        "${comp_out_dir}",
+  "--output-base",
+        "${comp_base}"
       ],
       "base_params": { "threads": 1 },
       "params": [
-  {"name": "impl", "cli": "--implementations", "type": "string", "enum": ["naive","opt"], "default": ["opt"], "help": "Comma list of implementations (naive,opt)"},
-  {"name": "tau", "cli": "--taus", "type": "string", "default": ["3","5","10","inf"], "allow_inf": true, "numeric": "int", "min": 2, "help": "Comma list of taus (>=2 or inf)"},
-  {"name": "k", "cli": "--ks", "type": "float", "default": [50.0], "numeric": "float", "min": 0, "help": "Comma list of k values"},
-  {"name": "threads", "cli": "--threads", "type": "int", "default": [1,2,4], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Threads for opt"},
-  {"name": "maxbuf", "cli": "--maxbufs", "type": "int", "default": [50000000], "numeric": "int", "min": 1, "when": {"equals": {"key": "impl", "value": "opt"}}, "help": "Max buffer for opt"}
+        {
+          "name": "impl",
+          "cli": "--implementations",
+          "type": "string",
+          "enum": ["naive", "opt"],
+          "default": ["opt"],
+          "help": "Comma list of implementations (naive,opt)"
+        },
+        {
+          "name": "tau",
+          "cli": "--taus",
+          "type": "string",
+          "default": ["3", "5", "10", "inf"],
+          "allow_inf": true,
+          "numeric": "int",
+          "min": 2,
+          "help": "Comma list of taus (>=2 or inf)"
+        },
+        {
+          "name": "k",
+          "cli": "--ks",
+          "type": "float",
+          "default": [50, 300, 800],
+          "numeric": "float",
+          "min": 0,
+          "help": "Comma list of k values"
+        },
+        {
+          "name": "threads",
+          "cli": "--threads",
+          "type": "int",
+          "default": [1, 2, 4],
+          "numeric": "int",
+          "min": 1,
+          "when": { "equals": { "key": "impl", "value": "opt" } },
+          "help": "Threads for opt"
+        },
+        {
+          "name": "maxbuf",
+          "cli": "--maxbufs",
+          "type": "int",
+          "default": [50000000],
+          "numeric": "int",
+          "min": 1,
+          "when": { "equals": { "key": "impl", "value": "opt" } },
+          "help": "Max buffer for opt"
+        }
       ],
       "auto_params": [
-        { "name": "comp_out_dir", "template": "components/${algo}/tau_${tau}/k_${k}", "join_out_dir": true },
-        { "name": "comp_base", "template": "${file_root}", "join_out_dir": false }
+        {
+          "name": "comp_out_dir",
+          "template": "components/${algo}/tau_${tau}/k_${k}",
+          "join_out_dir": true
+        },
+        {
+          "name": "comp_base",
+          "template": "${file_root}",
+          "join_out_dir": false
+        }
       ],
       "csv": {
         "path": "segmentation_results.csv",
         "header": [
-          "file","impl","tau","k","threads","maxbuf","memlimit_mb",
-          "vars","edges","comps","keff","gini","pmax","entropyJ",
-          "total_sec","parse_sec","vig_build_sec","seg_sec","agg_memory"
+          "file",
+          "impl",
+          "tau",
+          "k",
+          "threads",
+          "maxbuf",
+          "memlimit_mb",
+          "vars",
+          "edges",
+          "comps",
+          "keff",
+          "gini",
+          "pmax",
+          "entropyJ",
+          "total_sec",
+          "parse_sec",
+          "vig_build_sec",
+          "seg_sec",
+          "agg_memory"
         ],
-        "required_keys": ["vars","edges","comps","keff","gini","pmax","entropyJ","k","total_sec","impl","threads","agg_memory"],
-        "key_cols": [0,1,2,3,4,5]
+        "required_keys": [
+          "vars",
+          "edges",
+          "comps",
+          "keff",
+          "gini",
+          "pmax",
+          "entropyJ",
+          "k",
+          "total_sec",
+          "impl",
+          "threads",
+          "agg_memory"
+        ],
+        "key_cols": [0, 1, 2, 3, 4, 5]
       }
     }
   ]

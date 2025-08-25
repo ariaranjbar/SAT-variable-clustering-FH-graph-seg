@@ -5,8 +5,8 @@ Segments the Variable Interaction Graph (VIG) of a CNF using a Felzenszwalb–Hu
 ## Usage
 
 ```bash
-segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--maxbuf M] 
-             [--graph-out FILE] [--comp-out DIR] [--comp-base NAME]
+segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--maxbuf M]
+             [--graph-out DIR] [--comp-out DIR] [--cross-out DIR] [--output-base NAME]
 ```
 
 - `-i, --input` Path to CNF or `-` for stdin
@@ -16,9 +16,11 @@ segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--max
 - `--opt` Use optimized VIG builder (default)
 - `-t, --threads` Threads for optimized VIG build (0 = auto)
 - `--maxbuf` Max contributions buffer for optimized VIG build
-- `--graph-out FILE` Write `FILE.node.csv` with `id,component` and `FILE.edges.csv` with `u,v,w`
-- `--comp-out DIR` Write component summary CSV to `DIR/<base>_components.csv`
-- `--comp-base NAME` Override `<base>` for component CSV filename
+- `--graph-out DIR` Write `DIR/<base>.node.csv` with `id,component` and `DIR/<base>.edges.csv` with `u,v,w`
+- `--comp-out DIR` Write component summary CSV to `DIR/<base>_components.csv` (sorted by size desc)
+- `--cross-out DIR` Write strongest cross-component edges to `DIR/<base>_cross.csv` (sorted by weight desc)
+- `--output-base NAME` Override `<base>` for all outputs (components, graph, cross). If omitted, `<base>` is derived from input file name (without extensions) or `stdin`.
+  - Note: `--comp-base` is deprecated; use `--output-base` instead.
 
 Defaults: `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`.
 
@@ -30,7 +32,7 @@ Output fields include: `vars, edges, comps, k, tau, parse_sec, vig_build_sec, se
 segmentation -i algorithms/cnf_info/sample.cnf --tau 3 --k 50 --opt -t 2
 cat algorithms/cnf_info/sample.cnf | segmentation -i - --tau inf --k 25 --naive
 segmentation -i algorithms/cnf_info/sample.cnf --tau inf --k 50 --opt \
-  --graph-out /tmp/sample_seg --comp-out /tmp/components --comp-base sample
+  --graph-out /tmp/out --comp-out /tmp/out --cross-out /tmp/out --output-base sample
 ```
 
 ## Benchmark runners

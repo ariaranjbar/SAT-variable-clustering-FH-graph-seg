@@ -30,7 +30,7 @@ namespace thesis {
  */
 struct CompSummary {
     uint32_t K = 0;
-    uint32_t N = 0;
+    uint64_t N = 0;
     double keff = 0.0;
     double gini = 0.0;
     double pmax = 0.0;

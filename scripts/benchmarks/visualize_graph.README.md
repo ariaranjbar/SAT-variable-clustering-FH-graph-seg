@@ -23,6 +23,9 @@ Options:
 - `--max-nodes N`, `--max-edges M` — subsample for large graphs (0 = no cap)
 - `--node-size`, `--edge-alpha`, `--edge-min-width`, `--edge-max-width`, `--weight-scale` — visual tuning
 - `--no-legend`, `--no-labels` — disable legend or labels
+- `--edge-labels` — draw edge weights as labels (can clutter large graphs)
+- `--edge-labels-max N` — label at most N strongest edges (default: 200)
+- `--edge-labels-fmt F` — Python format spec for weights (default: `.3g`, e.g., `.2f`)
 
 Dependencies:
 

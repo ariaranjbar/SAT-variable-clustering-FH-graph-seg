@@ -73,6 +73,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--weight-scale", type=float, default=1.0, help="Multiply sqrt(weight) by this when computing width")
     p.add_argument("--no-legend", action="store_true", help="Disable legend even if components present")
     p.add_argument("--no-labels", action="store_true", help="Do not draw node labels")
+    # Edge weight labels (optional, can clutter on large graphs)
+    p.add_argument("--edge-labels", action="store_true", help="Draw edge weight labels for up to --edge-labels-max strongest edges")
+    p.add_argument("--edge-labels-max", type=int, default=200, help="Max number of edges to label (strongest by weight)")
+    p.add_argument("--edge-labels-fmt", type=str, default=".3g", help="Python format spec for weights (e.g., .2f, .3g)")
     return p.parse_args()
 
 
@@ -246,6 +250,16 @@ def main() -> None:
 
     if not args.no_labels and len(snodes) <= 200:
         nx.draw_networkx_labels(G, pos, font_size=6)
+
+    # Optional edge weight labels
+    if args.edge_labels and len(sedges) > 0:
+        try:
+            # Label the strongest edges first to reduce clutter
+            top_edges = sorted(sedges, key=lambda e: e[2], reverse=True)[: max(0, args.edge_labels_max)]
+            edge_labels = {(u, v): format(w, args.edge_labels_fmt) for (u, v, w) in top_edges}
+            nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6, rotate=False)
+        except Exception as e:
+            sys.stderr.write(f"Warning: failed to draw edge labels: {e}\n")
 
     if args.title:
         plt.title(args.title)

@@ -1,0 +1,12 @@
+{
+  "min": {
+    "total_sec": 0.1,
+    "comps": 3,
+    "vars": 500
+  },
+  "max": {
+    "comps": 50000,
+    "parse_sec": 5.0,
+    "agg_memory": 3000000000
+  }
+}
