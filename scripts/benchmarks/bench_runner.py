@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import argparse
 import csv
 import os
@@ -12,6 +12,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
+import hashlib
+import json
 
 # Notes
 # - Mirrors the behavior of run_vig_info_random.sh and run_segmentation_random.sh
@@ -136,7 +138,8 @@ def os_is_darwin() -> bool:
 # -------------- Execution helpers --------------
 
 def run_with_streaming(cmd: List[str], infile: Path, log_path: Path, verbose: bool,
-                       memlimit_mb: Optional[int] = None) -> Tuple[int, List[str]]:
+                       memlimit_mb: Optional[int] = None,
+                       log_header: Optional[str] = None) -> Tuple[int, List[str]]:
     """Run `cmd` with stdin as xz -dc of infile (if .xz) or direct file via -i path,
     capturing stdout to log and memory-limiting on Linux. Return (exit_code, output_lines)."""
     ensure_out_dir(log_path.parent)
@@ -179,6 +182,11 @@ def run_with_streaming(cmd: List[str], infile: Path, log_path: Path, verbose: bo
 
         lines: List[str] = []
         with log_path.open("w") as logf:
+            if log_header:
+                logf.write(log_header)
+                if not log_header.endswith("\n"):
+                    logf.write("\n")
+                logf.flush()
             assert proc.stdout is not None
             for ln in proc.stdout:
                 logf.write(ln)
@@ -399,8 +407,9 @@ def _subst_template(tmpl: str, vars_map: Dict[str, str]) -> str:
 def _compute_auto_params(algo_cfg: dict, combo: Dict[str, str], out_dir: Path, algo_name: str, file_path: Optional[Path]) -> Dict[str, str]:
     """Compute algorithm-specific auto-generated parameters.
     Schema per entry:
-      {"name": "param_name", "template": "relative/or/absolute/with/${vars}", "join_out_dir": true|false}
-    Vars available: all keys in combo, plus algo, out_dir, file, file_stem.
+        {"name": "param_name", "template": "relative/or/absolute/with/${vars}", "join_out_dir": true|false, "when": { ... }}
+    - Supports optional 'when' conditions (same structure as params 'when'). If present and false, this auto param is skipped.
+    Vars available to template/conditions: all keys in combo, plus algo, out_dir, file, file_stem, file_root.
     When join_out_dir is true, final path = out_dir / substituted(template).
     """
     res: Dict[str, str] = {}
@@ -436,6 +445,12 @@ def _compute_auto_params(algo_cfg: dict, combo: Dict[str, str], out_dir: Path, a
             "file_stem": "" if file_path is None else file_path.stem,
             "file_root": file_root,
         })
+        # Optional condition to include this auto param
+        cond = ap.get("when")
+        if cond is not None and not _eval_condition(cond, vars_map):
+            # Skip generating this auto param when condition is false
+            continue
+
         val = _subst_template(str(tmpl), vars_map)
         if bool(ap.get("join_out_dir", False)):
             val = str(out_dir / val)
@@ -467,6 +482,18 @@ def _params_tag(params: Dict[str, str], exclude_keys: Optional[List[str]] = None
         v = params[k]
         parts.append(f"{k}{_slug_value(v)}")
     return ".".join(parts)
+
+
+def _short_hash_tag(params: Dict[str, str], extra: Optional[Dict[str, str]] = None, length: int = 12) -> str:
+    """Build a short, stable hash tag from params and optional extras.
+    Uses SHA1 over a JSON dump with sorted keys, then returns first `length` hex chars.
+    """
+    m: Dict[str, str] = dict(params)
+    if extra:
+        m.update({k: str(v) for k, v in extra.items()})
+    blob = json.dumps(m, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    h = hashlib.sha1(blob).hexdigest()
+    return h[:max(8, min(40, length))]
 
 
 def _parse_required_keys(lines: List[str], required: List[str]) -> Optional[Dict[str, str]]:
@@ -630,8 +657,8 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                 w = csv.writer(f)
                 w.writerow(header)
 
-    # Iterate files and runs
-    for fpath in sel_files:
+        # Iterate files and runs for THIS algorithm
+        for fpath in sel_files:
             display_base = fpath.name
             combos = _product_sweep(param_specs, base_params)
 
@@ -679,12 +706,25 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                     use_path = cached_path if cached_path is not None else fpath
                     cmd = _format_cmd([str(x) for x in cmd_template], combo2, use_path, bin_path=bin_path)
                     stamp = time.strftime("%Y%m%d-%H%M%S")
-                    params_tag = _params_tag(combo2, exclude_keys=["comp_out_dir", "comp_base"]) 
-                    ml_tag = f".mem{ml}mb" if ml is not None else ""
+                    rand = f"{random.randrange(16**6):06x}"
+                    short = _short_hash_tag(combo2, {"file": display_base, "mem": ml})
+                    ml_tag = f".m{ml}mb" if ml is not None else ""
                     safe_base = _slug_value(display_base, max_len=80)
-                    log = out_dir / f"{safe_base}.{name}.{params_tag}{ml_tag}.{stamp}.log"
+                    log = out_dir / f"{safe_base}.{name}.{short}.{rand}{ml_tag}.{stamp}.log"
 
-                    rc, lines = run_with_streaming(cmd, use_path, log, verbose, memlimit_mb=ml)
+                    # Compose a descriptive header inside the log
+                    header_map = {
+                        "timestamp": stamp,
+                        "algo": name,
+                        "file": display_base,
+                        "input_path": str(use_path),
+                        "cmd": " ".join(shlex.quote(x) for x in cmd),
+                        "params": combo2,
+                        "memlimit_mb": None if ml is None else ml,
+                    }
+                    log_header = "# bench_runner header\n" + json.dumps(header_map, sort_keys=True) + "\n# ---- output ----\n"
+
+                    rc, lines = run_with_streaming(cmd, use_path, log, verbose, memlimit_mb=ml, log_header=log_header)
                     ok = False
                     try:
                         m = _parse_required_keys(lines, required_keys)
@@ -929,7 +969,9 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                 params_tag = _params_tag(combo2, exclude_keys=["comp_out_dir", "comp_base"]) 
                 ml_tag = f".mem{ml}mb" if ml is not None else ""
                 safe_base = _slug_value(display_base, max_len=80)
-                log = ns.out_dir / f"{safe_base}.{algo_name}.{params_tag}{ml_tag}.{stamp}.log"
+                rand = f"{random.randrange(16**6):06x}"
+                short = _short_hash_tag(combo2, {"file": display_base, "mem": ml})
+                log = ns.out_dir / f"{safe_base}.{algo_name}.{short}.{rand}{ml_tag}.{stamp}.log"
 
                 if ns.dry_run:
                     vprint(True, "RUN:", " ".join(shlex.quote(x) for x in cmd))
@@ -952,7 +994,17 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                             vprint(ns.verbose, f"Skip existing: {pre_key}")
                             continue
 
-                rc, lines = run_with_streaming(cmd, use_path, log, ns.verbose, memlimit_mb=ml)
+                header_map = {
+                    "timestamp": stamp,
+                    "algo": algo_name,
+                    "file": display_base,
+                    "input_path": str(use_path),
+                    "cmd": " ".join(shlex.quote(x) for x in cmd),
+                    "params": combo2,
+                    "memlimit_mb": None if ml is None else ml,
+                }
+                log_header = "# bench_runner header\n" + json.dumps(header_map, sort_keys=True) + "\n# ---- output ----\n"
+                rc, lines = run_with_streaming(cmd, use_path, log, ns.verbose, memlimit_mb=ml, log_header=log_header)
                 ok = False
                 try:
                     m = _parse_required_keys(lines, required_keys)

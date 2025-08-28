@@ -78,7 +78,7 @@ Schema for each entry in `algorithms`:
 Usage example after registering `vig_info_dyn`:
 
 ```bash
-python3 scripts/benchmarks/bench_runner.py vig_info_dyn -n 3 \
+python scripts/benchmarks/bench_runner.py vig_info_dyn -n 3 \
   --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
   --skip-existing -v
 ```

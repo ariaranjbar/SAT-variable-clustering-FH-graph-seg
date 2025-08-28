@@ -10,7 +10,7 @@ Inputs:
 Basic usage:
 
 ```bash
-python3 scripts/benchmarks/visualize_graph.py \
+python scripts/benchmarks/visualize_graph.py \
   --nodes scripts/benchmarks/out/graphs/graph_output.seg.node.csv \
   --edges scripts/benchmarks/out/graphs/graph_output.seg.edges.csv \
   --out   scripts/benchmarks/out/graphs/graph_output.seg.png \

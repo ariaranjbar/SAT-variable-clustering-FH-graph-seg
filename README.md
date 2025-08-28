@@ -105,12 +105,12 @@ Use the dynamic runner to sweep algorithms over `benchmarks/` with CSV outputs i
 
 ```bash
 # VIG sweeps
-python3 scripts/benchmarks/bench_runner.py vig_info -n 5 \
+python scripts/benchmarks/bench_runner.py vig_info -n 5 \
   --implementations naive,opt --taus 3,5,10,inf --threads 1,2,4 --maxbufs 50000000,100000000 \
   --skip-existing -v
 
 # Segmentation sweeps
-python3 scripts/benchmarks/bench_runner.py segmentation -n 5 \
+python scripts/benchmarks/bench_runner.py segmentation -n 5 \
   --implementations naive,opt --taus 3,5,10,inf --ks 25,50,100 --threads 1,2,4 --maxbufs 50000000,100000000 \
   --skip-existing -v
 ```
@@ -124,7 +124,7 @@ Features:
 - Config mode to run multiple algorithms from a JSON/YAML file:
 
 ```bash
-python3 scripts/benchmarks/bench_runner.py config --file scripts/benchmarks/configs/example_configs.json -v
+python scripts/benchmarks/bench_runner.py config --file scripts/benchmarks/configs/example_configs.json -v
 ```
 
 Environment (optional):

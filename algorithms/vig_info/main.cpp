@@ -13,8 +13,8 @@ int main(int argc, char** argv) {
     ArgParser cli("Compute variable-interaction graph statistics for a CNF file");
     cli.add_option(OptionSpec{.longName = "input", .shortName = 'i', .type = ArgType::String, .valueName = "FILE", .help = "Path to DIMACS CNF file, or '-' for stdin", .required = true});
     cli.add_option(OptionSpec{.longName = "tau", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N|inf", .help = "Clause size threshold; use 'inf' for no limit", .required = false, .defaultValue = "inf", .allowInfToken = true});
-    cli.add_option(OptionSpec{.longName = "maxbuf", .shortName = '\0', .type = ArgType::Size, .valueName = "M", .help = "Max contributions buffer in optimized mode", .required = false, .defaultValue = "50000000"});
-    cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "K", .help = "Number of worker threads (0=auto)", .required = false, .defaultValue = "0"});
+    cli.add_option(OptionSpec{.longName = "maxbuf", .shortName = '\0', .type = ArgType::Size, .valueName = "BYTES", .help = "Max contributions buffer in optimized mode", .required = false, .defaultValue = "50000000"});
+    cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "N", .help = "Number of worker threads (0=auto)", .required = false, .defaultValue = "0"});
     cli.add_flag("naive", '\0', "Use naive implementation");
     cli.add_flag("opt", '\0', "Use optimized implementation");
     cli.add_option(OptionSpec{.longName = "graph-out", .shortName = '\0', .type = ArgType::String, .valueName = "FILE", .help = "Write graph CSVs to FILE.node.csv and FILE.edges.csv", .required = false, .defaultValue = ""});

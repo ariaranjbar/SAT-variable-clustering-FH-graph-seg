@@ -57,4 +57,16 @@ unsigned DisjointSets::unite(unsigned a, unsigned b) {
     }
 }
 
+std::vector<unsigned> DisjointSets::roots() const
+{
+    std::vector<unsigned> root_nodes;
+    for (unsigned i = 0; i < parent_.size(); ++i) {
+        if (parent_[i] == i) {
+            root_nodes.push_back(i);
+        }
+    }
+    // assert that there are only as many roots as there are components
+    assert(root_nodes.size() == comp_count_);
+    return root_nodes;
+}
 } // namespace thesis

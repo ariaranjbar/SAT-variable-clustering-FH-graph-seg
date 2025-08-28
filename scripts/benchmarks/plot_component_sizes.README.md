@@ -6,12 +6,12 @@ Usage examples:
 
 ```bash
 # Scan the default root and write combined plots
-python3 scripts/benchmarks/plot_component_sizes.py \
+python scripts/benchmarks/plot_component_sizes.py \
   --root scripts/benchmarks/out/components \
   --outdir scripts/benchmarks/out/component_size_plots
 
 # Process specific files only
-python3 scripts/benchmarks/plot_component_sizes.py \
+python scripts/benchmarks/plot_component_sizes.py \
   --files scripts/benchmarks/out/components/segmentation/tau_100/k_500.0/94dd280b1562ee7dae44b303b8fed233-Break_unsat_18_31_components.csv \
   --outdir scripts/benchmarks/out/component_size_plots
 ```

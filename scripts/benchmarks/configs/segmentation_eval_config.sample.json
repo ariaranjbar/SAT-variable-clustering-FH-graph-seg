@@ -1,0 +1,23 @@
+{
+  "root_dir": "benchmarks",
+  "sample_count": 10,
+  "recursive": true,
+  "out_dir": "scripts/benchmarks/out/seg_eval",
+  "combined_csv": "scripts/benchmarks/out/seg_eval/combined.csv",
+  "bin": "build/algorithms/segmentation_eval/segmentation_eval",
+  "impl": "opt",
+  "threads": 10,
+  "maxbuf": 50000000,
+  "tau": "100",
+  "k": "100",
+  "norms": "off",
+  "norm_samples": "1000",
+  "size_exp": "1.0,1.2,1.5,2,2.5",
+  "mod_guard": "on",
+  "gamma": "0.5",
+  "anneal": "on",
+  "dq_tol0": "5e-4",
+  "dq_vscale": "0",
+  "ambiguous": "margin",
+  "gate_margin": "0.05"
+}

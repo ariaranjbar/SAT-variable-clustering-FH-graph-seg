@@ -1,0 +1,19 @@
+{
+  "root_dir": "benchmarks",
+  "sample_count": 1,
+  "recursive": false,
+  "out_dir": "scripts/benchmarks/out/seg_eval_smoke",
+  "combined_csv": "scripts/benchmarks/out/seg_eval_smoke/combined.csv",
+  "bin": "build/algorithms/segmentation_eval/segmentation_eval",
+  "impl": "opt",
+  "threads": 0,
+  "maxbuf": 20000000,
+  "tau": "200",
+  "k": "10",
+  "norms": "off",
+  "size_exp": "1.0",
+  "mod_guard": "off",
+  "gamma": "1.0",
+  "anneal": "off",
+  "ambiguous": "accept"
+}

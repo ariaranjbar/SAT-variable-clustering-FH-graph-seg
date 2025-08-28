@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Utilities to map component CSV filenames to dataset families (via benchmarks/meta.csv)
 and assign stable colors per family.

@@ -4,18 +4,23 @@
 // Variable Incidence Graph (VIG) builders: naive (single-threaded) and
 // optimized (multi-threaded, memory-aware).
 //
-// Optimized-path highlights (final design):
-//  - CNF clauses are pre-normalized at load time (sorted by |lit|, deduped, no tautologies).
-//  - O(s) phase-1 per clause for per-variable contribution counts.
-//  - Memory-aware batching of variable ranges.
-//  - ONE-PASS round with “batched atomics”:
-//      * for each u in a clause, atomic fetch_add(s-1-i) once,
-//        then write a contiguous run of neighbors to the batch buffer.
-//    => only 1 clause scan per round, few atomics, deterministic per-a multiset.
-//  - Per-a accumulation by sort-and-reduce (local, cache-friendly).
-//  - 32-bit offsets/counts with overflow guards.
-//  - Thread pool + std::barrier (no spawn/join per round).
-//  - Detailed VIG_OPT_DEBUG planning/stats + memory breakdown.
+// Optimized-path highlights (final design, matches implementation below):
+//  - Assumes CNF is pre-normalized at load time (sorted by |lit|, deduped, no tautologies).
+//  - Phase 1 (O(s) per clause): compute per-variable contribution counts using (s-1-i).
+//  - Memory-aware planning: compute total_contrib and size per-thread buffers under a user cap,
+//    bumping to the max per-variable contrib when needed; derive passes/rounds.
+//  - Partition variables into contiguous batches by contribution mass; map var->active batch each round.
+//  - Per round (ONE PASS over assigned clauses per thread):
+//      * for each u that is active, do a single atomic fetch_add(delta = s-1-i)
+//        to reserve a contiguous segment, then write all neighbors (b, w_pair) into the flat buffer.
+//    => one clause scan per round, few atomics, deterministic per-variable multiset.
+//  - Per-variable accumulation: local sort [off, off+cnt) by neighbor id and reduce to (a,b,weight) edges.
+//  - 32-bit offsets/counts with overflow guards; throws on overflow.
+//  - Thread pool with fixed workers + std::barrier across phases; no spawn/join per round.
+//  - Weight table precomputed up to the observed max clause size; falls back to direct compute if needed.
+//  - Logging & accounting: optional VIG_OPT_DEBUG planning/stats and detailed memory breakdown when
+//    THESIS_VIG_MEMORY_ACCOUNTING is enabled (tracks transient peak and merge buffer peaks).
+//  - Results: per-thread edge buffers merged; edges left unsorted (consumers may sort downstream).
 // ----------------------------------------------------------------------------
 
 #include "thesis/vig.hpp"
@@ -48,7 +53,9 @@ namespace thesis
       {
         const size_t cur = current.fetch_add(bytes, std::memory_order_relaxed) + bytes;
         size_t p = peak.load(std::memory_order_relaxed);
-        while (cur > p && !peak.compare_exchange_weak(p, cur, std::memory_order_relaxed)) {}
+        while (cur > p && !peak.compare_exchange_weak(p, cur, std::memory_order_relaxed))
+        {
+        }
       }
       void sub(size_t bytes) { current.fetch_sub(bytes, std::memory_order_relaxed); }
     };
@@ -71,7 +78,10 @@ namespace thesis
     // Enabled only when THESIS_VIG_MEMORY_ACCOUNTING is defined.
     // ----------------------------------------------------------------------
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-    struct CountingAllocatorGlobalBytes { static std::atomic<size_t> bytes; };
+    struct CountingAllocatorGlobalBytes
+    {
+      static std::atomic<size_t> bytes;
+    };
     inline std::atomic<size_t> CountingAllocatorGlobalBytes::bytes{0};
 
     template <class T>
@@ -102,7 +112,10 @@ namespace thesis
       }
 
       template <class U>
-      struct rebind { using other = CountingAllocator<U>; };
+      struct rebind
+      {
+        using other = CountingAllocator<U>;
+      };
     };
 
     template <class T>
@@ -128,11 +141,11 @@ namespace thesis
 
     static inline OptPlan plan(size_t total_contrib, unsigned t, size_t user_maxbuf)
     {
-      const size_t denom  = std::max<size_t>(1, t > 0 ? (t - 1) : 0);
-      const size_t per    = std::max<size_t>(1, user_maxbuf / denom);
+      const size_t denom = std::max<size_t>(1, t > 0 ? (t - 1) : 0);
+      const size_t per = std::max<size_t>(1, user_maxbuf / denom);
       const size_t passes = (per > 0 && t > 0)
-                            ? ((total_contrib + per * t - 1) / (per * t))
-                            : 0;
+                                ? ((total_contrib + per * t - 1) / (per * t))
+                                : 0;
       return OptPlan{total_contrib, per, passes};
     }
 
@@ -152,24 +165,25 @@ namespace thesis
     using detail::pack_pair;
     using detail::unpack_pair;
 
-  using KV  = std::pair<const uint64_t, double>;
+    using KV = std::pair<const uint64_t, double>;
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  using Map = std::unordered_map<uint64_t, double,
-                   std::hash<uint64_t>, std::equal_to<uint64_t>,
-                   detail::CountingAllocator<KV>>;
-  // Reset the counting allocator bytes before use.
-  detail::CountingAllocator<KV>::bytes.store(0, std::memory_order_relaxed);
+    using Map = std::unordered_map<uint64_t, double,
+                                   std::hash<uint64_t>, std::equal_to<uint64_t>,
+                                   detail::CountingAllocator<KV>>;
+    // Reset the counting allocator bytes before use.
+    detail::CountingAllocator<KV>::bytes.store(0, std::memory_order_relaxed);
 #else
-  using Map = std::unordered_map<uint64_t, double>;
+    using Map = std::unordered_map<uint64_t, double>;
 #endif
 
-  Map agg;
+    Map agg;
     agg.reserve(static_cast<size_t>(cnf.get_clause_count() * 2u));
 
     for (const auto &c : clauses)
     {
       const size_t s = c.size();
-      if (s < 2 || s > clause_size_threshold) continue;
+      if (s < 2 || s > clause_size_threshold)
+        continue;
 
       const double w_pair = inv_binom2(s);
       for (size_t i = 0; i + 1 < s; i++)
@@ -190,15 +204,15 @@ namespace thesis
       result.edges.push_back(Edge{u, v, kv.second});
     }
 
-  // No sorting here; consumers can sort if needed (e.g., segmentation).
+    // No sorting here; consumers can sort if needed (e.g., segmentation).
 
-  // Memory accounting: only if enabled at compile time.
+    // Memory accounting: only if enabled at compile time.
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  const size_t map_bytes_exact = detail::CountingAllocator<KV>::bytes.load(std::memory_order_relaxed);
-  const size_t result_edges_bytes = result.edges.capacity() * sizeof(Edge);
-  result.aggregation_memory = map_bytes_exact + result_edges_bytes;
+    const size_t map_bytes_exact = detail::CountingAllocator<KV>::bytes.load(std::memory_order_relaxed);
+    const size_t result_edges_bytes = result.edges.capacity() * sizeof(Edge);
+    result.aggregation_memory = map_bytes_exact + result_edges_bytes;
 #else
-  result.aggregation_memory = 0;
+    result.aggregation_memory = 0;
 #endif
 
     return result;
@@ -207,8 +221,15 @@ namespace thesis
   // --------------------------------------------------------------------------
   // Optimized multi-threaded builder (memory-aware batching).
   // --------------------------------------------------------------------------
-  struct Batch { uint32_t start, end; };
-  struct BufferEntry { uint32_t b; float w; };
+  struct Batch
+  {
+    uint32_t start, end;
+  };
+  struct BufferEntry
+  {
+    uint32_t b;
+    float w;
+  };
 
   VIG build_vig_optimized(const CNF &cnf,
                           unsigned clause_size_threshold,
@@ -216,14 +237,14 @@ namespace thesis
   {
     const unsigned fallback_threads =
         std::max(1u, std::thread::hardware_concurrency() ? std::thread::hardware_concurrency() : 1u);
-  return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions,
-                 fallback_threads);
+    return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions,
+                               fallback_threads);
   }
 
   VIG build_vig_optimized(const CNF &cnf,
-              unsigned clause_size_threshold,
-              std::size_t max_buffer_contributions,
-              unsigned num_threads)
+                          unsigned clause_size_threshold,
+                          std::size_t max_buffer_contributions,
+                          unsigned num_threads)
   {
     using detail::inv_binom2;
 
@@ -232,13 +253,14 @@ namespace thesis
     const auto &clauses = cnf.get_clauses();
     const uint32_t n = result.n;
 
-  // Reset transient-memory gauge for this build if accounting is enabled.
+    // Reset transient-memory gauge for this build if accounting is enabled.
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  detail::g_mem_gauge.current.store(0, std::memory_order_relaxed);
-  detail::g_mem_gauge.peak.store(0, std::memory_order_relaxed);
+    detail::g_mem_gauge.current.store(0, std::memory_order_relaxed);
+    detail::g_mem_gauge.peak.store(0, std::memory_order_relaxed);
 #endif
 
-    if (n == 0) return result;
+    if (n == 0)
+      return result;
     if (max_buffer_contributions == 0)
       throw std::invalid_argument("max_buffer_contributions must be > 0");
     if (num_threads == 0)
@@ -253,8 +275,10 @@ namespace thesis
     for (const auto &c : clauses)
     {
       const size_t s = c.size();
-      if (s < 2 || s > clause_size_threshold) continue;
-      if (s > max_clause_size_observed) max_clause_size_observed = s;
+      if (s < 2 || s > clause_size_threshold)
+        continue;
+      if (s > max_clause_size_observed)
+        max_clause_size_observed = s;
       for (size_t i = 0; i + 1 < s; ++i)
       {
         const uint32_t a = static_cast<uint32_t>(std::abs(c[i]) - 1);
@@ -263,13 +287,17 @@ namespace thesis
     }
 
     const size_t total_contrib = std::accumulate(contrib_counts.begin(), contrib_counts.end(), 0ull);
-    const size_t max_contrib   = *std::max_element(contrib_counts.begin(), contrib_counts.end());
-    const size_t user_cap      = std::min(total_contrib, static_cast<size_t>(max_buffer_contributions));
+    const size_t max_contrib = *std::max_element(contrib_counts.begin(), contrib_counts.end());
+    const size_t user_cap = std::min(total_contrib, static_cast<size_t>(max_buffer_contributions));
     auto opt = detail::plan(total_contrib, t, user_cap);
     size_t per_thread_buffer = opt.per_thread_buffer;
 
     bool bumped_to_fit = false;
-    if (per_thread_buffer < max_contrib) { per_thread_buffer = max_contrib; bumped_to_fit = true; }
+    if (per_thread_buffer < max_contrib)
+    {
+      per_thread_buffer = max_contrib;
+      bumped_to_fit = true;
+    }
     const size_t target_passes =
         (per_thread_buffer > 0) ? ((total_contrib + per_thread_buffer * t - 1) / (per_thread_buffer * t)) : 0;
 
@@ -284,11 +312,14 @@ namespace thesis
         if (accum + cnt > static_cast<uint64_t>(per_thread_buffer) && v > start)
         {
           batches.push_back(Batch{start, static_cast<uint32_t>(v - 1)});
-          start = v; accum = cnt;
+          start = v;
+          accum = cnt;
         }
-        else accum += cnt;
+        else
+          accum += cnt;
       }
-      if (start < n) batches.push_back(Batch{start, n - 1});
+      if (start < n)
+        batches.push_back(Batch{start, n - 1});
     }
 
     // Batch stats (also used as a heuristic for reservations).
@@ -298,14 +329,15 @@ namespace thesis
     for (const auto &b : batches)
     {
       uint64_t s = 0;
-      for (uint32_t v = b.start; v <= b.end; ++v) s += contrib_counts[v];
+      for (uint32_t v = b.start; v <= b.end; ++v)
+        s += contrib_counts[v];
       batch_contrib_sizes.push_back(s);
       batch_contrib_sum += s;
       batch_contrib_min = std::min(batch_contrib_min, s);
       batch_contrib_max = std::max(batch_contrib_max, s);
     }
     const double batch_contrib_avg = batches.empty() ? 0.0
-                                        : static_cast<double>(batch_contrib_sum) / static_cast<double>(batches.size());
+                                                     : static_cast<double>(batch_contrib_sum) / static_cast<double>(batches.size());
 
     if (std::getenv("VIG_OPT_DEBUG") != nullptr)
     {
@@ -329,20 +361,20 @@ namespace thesis
 
     // var -> active batch id in current round
     std::vector<int> var_to_active(n, -1);
-  // include in transient peak
+    // include in transient peak
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  detail::g_mem_gauge.add(var_to_active.capacity() * sizeof(int));
+    detail::g_mem_gauge.add(var_to_active.capacity() * sizeof(int));
 #endif
 
     struct ActiveBatch
     {
       Batch range;
-      std::vector<uint32_t> offsets;                      // prefix offsets per variable in batch
-      std::vector<uint32_t> counts32;                     // contrib count per variable (narrowed)
-      std::unique_ptr<std::atomic<uint32_t>[]> wptrs;     // atomic write pointers per variable
+      std::vector<uint32_t> offsets;                  // prefix offsets per variable in batch
+      std::vector<uint32_t> counts32;                 // contrib count per variable (narrowed)
+      std::unique_ptr<std::atomic<uint32_t>[]> wptrs; // atomic write pointers per variable
       size_t wptrs_len = 0;
-      std::vector<BufferEntry> buffer;                    // flat buffer (b,w)
-      size_t tracked_bytes = 0;                           // memory gauge
+      std::vector<BufferEntry> buffer; // flat buffer (b,w)
+      size_t tracked_bytes = 0;        // memory gauge
     };
 
     // Precompute weights up to the observed maximum (bounded). Avoid huge allocations for tau=inf.
@@ -354,9 +386,10 @@ namespace thesis
     // Clause domain per worker
     std::vector<size_t> cbegin(t), cend(t);
     const size_t C = clauses.size();
-    for (unsigned tid = 0; tid < t; ++tid) {
+    for (unsigned tid = 0; tid < t; ++tid)
+    {
       cbegin[tid] = (C * tid) / t;
-      cend[tid]   = (C * (tid + 1)) / t;
+      cend[tid] = (C * (tid + 1)) / t;
     }
 
     std::barrier sync(t);
@@ -417,10 +450,10 @@ namespace thesis
 
           // Accounting
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-          ab.tracked_bytes += ab.offsets.capacity()  * sizeof(uint32_t);
+          ab.tracked_bytes += ab.offsets.capacity() * sizeof(uint32_t);
           ab.tracked_bytes += ab.counts32.capacity() * sizeof(uint32_t);
-          ab.tracked_bytes += ab.buffer.capacity()   * sizeof(BufferEntry);
-          ab.tracked_bytes += ab.wptrs_len          * sizeof(std::atomic<uint32_t>);
+          ab.tracked_bytes += ab.buffer.capacity() * sizeof(BufferEntry);
+          ab.tracked_bytes += ab.wptrs_len * sizeof(std::atomic<uint32_t>);
           detail::g_mem_gauge.add(ab.tracked_bytes);
 #endif
         }
@@ -432,34 +465,39 @@ namespace thesis
     {
       for (size_t bi = 0; bi < batch_count_cur; ++bi)
       {
-    const auto &bch = active[bi].range;
-    for (uint32_t a = bch.start; a <= bch.end; ++a) var_to_active[a] = -1;
+        const auto &bch = active[bi].range;
+        for (uint32_t a = bch.start; a <= bch.end; ++a)
+          var_to_active[a] = -1;
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-    detail::g_mem_gauge.sub(active[bi].tracked_bytes);
+        detail::g_mem_gauge.sub(active[bi].tracked_bytes);
 #endif
       }
       active.clear();
       batch_count_cur = 0;
 
       // After each round, compute current worker_edges footprint and track peak.
-  size_t round_bytes = 0;
-  for (auto &ve : worker_edges) round_bytes += ve.capacity() * sizeof(Edge);
+      size_t round_bytes = 0;
+      for (auto &ve : worker_edges)
+        round_bytes += ve.capacity() * sizeof(Edge);
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  if (round_bytes > worker_edges_peak_bytes) worker_edges_peak_bytes = round_bytes;
+      if (round_bytes > worker_edges_peak_bytes)
+        worker_edges_peak_bytes = round_bytes;
 #endif
     };
 
     auto worker = [&](unsigned tid)
     {
       const size_t begin = cbegin[tid];
-      const size_t end   = cend[tid];
+      const size_t end = cend[tid];
 
       for (;;)
       {
         const size_t r = r_idx.load(std::memory_order_acquire);
-        if (r >= rounds) break;
+        if (r >= rounds)
+          break;
 
-        if (tid == 0) prepare_round(r);
+        if (tid == 0)
+          prepare_round(r);
         sync.arrive_and_wait(); // active ready
 
         // ONE-PASS SCAN+FILL with batched atomics.
@@ -467,7 +505,8 @@ namespace thesis
         {
           const auto &c = clauses[ci];
           const size_t s = c.size();
-          if (s < 2 || s > clause_size_threshold) continue;
+          if (s < 2 || s > clause_size_threshold)
+            continue;
 
           // s is guaranteed <= clause_size_threshold and we recorded max_clause_size_observed accordingly
           // Ensure index is within table bounds.
@@ -477,19 +516,20 @@ namespace thesis
           {
             const uint32_t u = static_cast<uint32_t>(std::abs(c[i]) - 1);
             const int abi = var_to_active[u];
-            if (abi < 0) continue;
+            if (abi < 0)
+              continue;
 
             auto &ab = active[static_cast<size_t>(abi)];
             const size_t idx = static_cast<size_t>(u - ab.range.start);
 
             const uint32_t delta = static_cast<uint32_t>(s - 1 - i);
-            const uint32_t pos0  = ab.wptrs[idx].fetch_add(delta, std::memory_order_relaxed);
+            const uint32_t pos0 = ab.wptrs[idx].fetch_add(delta, std::memory_order_relaxed);
 
             uint32_t pos = pos0;
             for (size_t j = i + 1; j < s; ++j)
             {
               const uint32_t b = static_cast<uint32_t>(std::abs(c[j]) - 1);
-              ab.buffer[pos++] = BufferEntry{ b, w_pair };
+              ab.buffer[pos++] = BufferEntry{b, w_pair};
             }
           }
         }
@@ -520,10 +560,11 @@ namespace thesis
               const size_t idx = static_cast<size_t>(a - sV);
               const uint32_t off = ab.offsets[idx];
               const uint32_t cnt = ab.counts32[idx];
-              if (!cnt) continue;
+              if (!cnt)
+                continue;
 
               BufferEntry *first = ab.buffer.data() + off;
-              BufferEntry *last  = first + cnt;
+              BufferEntry *last = first + cnt;
 
               std::sort(first, last, [](const BufferEntry &x, const BufferEntry &y)
                         { return x.b < y.b; });
@@ -535,7 +576,8 @@ namespace thesis
                 if (p->b != curr)
                 {
                   edges_out.emplace_back(a, curr, sum);
-                  curr = p->b; sum = 0.0;
+                  curr = p->b;
+                  sum = 0.0;
                 }
                 sum += static_cast<double>(p->w);
               }
@@ -546,7 +588,11 @@ namespace thesis
 
         sync.arrive_and_wait(); // end ACCUM
 
-        if (tid == 0) { cleanup_round(); r_idx.fetch_add(1, std::memory_order_acq_rel); }
+        if (tid == 0)
+        {
+          cleanup_round();
+          r_idx.fetch_add(1, std::memory_order_acq_rel);
+        }
         sync.arrive_and_wait(); // next round
       }
     };
@@ -554,19 +600,21 @@ namespace thesis
     // Launch pool
     std::vector<std::thread> pool;
     pool.reserve(t);
-    for (unsigned tid = 0; tid < t; ++tid) pool.emplace_back(worker, tid);
-    for (auto &th : pool) th.join();
+    for (unsigned tid = 0; tid < t; ++tid)
+      pool.emplace_back(worker, tid);
+    for (auto &th : pool)
+      th.join();
 
-  // Remove var_to_active from transient gauge now that we're done.
+    // Remove var_to_active from transient gauge now that we're done.
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  detail::g_mem_gauge.sub(var_to_active.capacity() * sizeof(int));
+    detail::g_mem_gauge.sub(var_to_active.capacity() * sizeof(int));
 #endif
 
     if (std::getenv("VIG_OPT_DEBUG") != nullptr)
     {
       std::cerr << "[vig_opt_stats] batches=" << batches.size()
                 << " rounds=" << rounds
-                << " passes_over_clauses=" << rounds  // one pass per round
+                << " passes_over_clauses=" << rounds // one pass per round
                 << " threads=" << t
                 << " total_contrib=" << total_contrib
                 << " batch_contrib_min=" << (batches.empty() ? 0 : batch_contrib_min)
@@ -577,7 +625,8 @@ namespace thesis
 
     // Merge per-thread edge buffers (note: may temporarily double memory with result.edges)
     size_t total_edges = 0;
-    for (const auto &ve : worker_edges) total_edges += ve.size();
+    for (const auto &ve : worker_edges)
+      total_edges += ve.size();
     result.edges.reserve(total_edges);
     for (auto &ve : worker_edges)
     {
@@ -587,37 +636,168 @@ namespace thesis
       std::vector<Edge>().swap(ve);
     }
 
-  // No sorting here; consumers can sort if needed.
+    // No sorting here; consumers can sort if needed.
 
-  // ---------------- Memory breakdown & final aggregation_memory ----------------
+    // ---------------- Memory breakdown & final aggregation_memory ----------------
 #if defined(THESIS_VIG_MEMORY_ACCOUNTING)
-  const size_t batch_peak_bytes     = detail::g_mem_gauge.peak.load(std::memory_order_relaxed);
-  const size_t result_edges_bytes   = result.edges.capacity() * sizeof(Edge);
-  const size_t misc_bytes =
-    contrib_counts.capacity() * sizeof(uint64_t)
-    + batches.capacity()       * sizeof(Batch)
-    + w_table.capacity()       * sizeof(float)
-    + cbegin.capacity()        * sizeof(size_t)
-    + cend.capacity()          * sizeof(size_t);
+    const size_t batch_peak_bytes = detail::g_mem_gauge.peak.load(std::memory_order_relaxed);
+    const size_t result_edges_bytes = result.edges.capacity() * sizeof(Edge);
+    const size_t misc_bytes =
+        contrib_counts.capacity() * sizeof(uint64_t) + batches.capacity() * sizeof(Batch) + w_table.capacity() * sizeof(float) + cbegin.capacity() * sizeof(size_t) + cend.capacity() * sizeof(size_t);
 
-  if (std::getenv("VIG_OPT_DEBUG") != nullptr)
-  {
-    std::cerr << "[vig_opt_mem]"
-        << " batch_peak="        << batch_peak_bytes
-        << " worker_edges_peak=" << worker_edges_peak_bytes
-        << " result_edges="      << result_edges_bytes
-        << " misc="              << misc_bytes
-        << "\n";
-  }
+    if (std::getenv("VIG_OPT_DEBUG") != nullptr)
+    {
+      std::cerr << "[vig_opt_mem]"
+                << " batch_peak=" << batch_peak_bytes
+                << " worker_edges_peak=" << worker_edges_peak_bytes
+                << " result_edges=" << result_edges_bytes
+                << " misc=" << misc_bytes
+                << "\n";
+    }
 
-  // Publish an actionable aggregate (excludes CNF storage and global program allocations).
-  result.aggregation_memory =
-    batch_peak_bytes + worker_edges_peak_bytes + result_edges_bytes + misc_bytes;
+    // Publish an actionable aggregate (excludes CNF storage and global program allocations).
+    result.aggregation_memory =
+        batch_peak_bytes + worker_edges_peak_bytes + result_edges_bytes + misc_bytes;
 #else
-  result.aggregation_memory = 0;
+    result.aggregation_memory = 0;
 #endif
 
     return result;
   }
 
 } // namespace thesis
+
+// ----------------------------------------------------------------------------
+
+namespace Louvain
+{
+  Graph::Graph()
+  {
+    nb_nodes = 0;
+    nb_links = 0;
+    total_weight = 0;
+  }
+
+  Graph::Graph(int nb_nodes, int nb_links, double total_weight,
+               vector<unsigned long> degrees_,
+               vector<unsigned int> links_,
+               vector<float> weights_)
+      : nb_nodes(nb_nodes),
+        nb_links(nb_links),
+        total_weight(total_weight),
+        degrees(std::move(degrees_)),
+        links(std::move(links_)),
+        weights(std::move(weights_))
+  {
+  }
+
+  bool
+  Graph::check_symmetry()
+  {
+    int error = 0;
+    for (unsigned int node = 0; node < nb_nodes; node++)
+    {
+      pair<vector<unsigned int>::iterator, vector<float>::iterator> p = neighbors(node);
+      for (unsigned int i = 0; i < nb_neighbors(node); i++)
+      {
+        unsigned int neigh = *(p.first + i);
+        float weight = *(p.second + i);
+
+        pair<vector<unsigned int>::iterator, vector<float>::iterator> p_neigh = neighbors(neigh);
+        for (unsigned int j = 0; j < nb_neighbors(neigh); j++)
+        {
+          unsigned int neigh_neigh = *(p_neigh.first + j);
+          float neigh_weight = *(p_neigh.second + j);
+
+          if (node == neigh_neigh && weight != neigh_weight)
+          {
+            cout << node << " " << neigh << " " << weight << " " << neigh_weight << endl;
+            if (error++ == 10)
+              exit(0);
+          }
+        }
+      }
+    }
+    return (error == 0);
+  }
+
+  Graph build_graph(const thesis::CNF &cnf,
+                    unsigned clause_size_threshold)
+  {
+
+    Graph g;
+    const unsigned int n = cnf.get_variable_count();
+    g.nb_nodes = n;
+
+    if (n < 2)
+    {
+      g.nb_links = 0;
+      g.total_weight = 0.0;
+      return g;
+    }
+
+    const auto &clauses = cnf.get_clauses();
+
+    // Per-node neighbor aggregation map: neighbor -> weight
+    std::vector<std::unordered_map<unsigned int, float>> adj(n);
+
+    for (const auto &c : clauses)
+    {
+      const size_t s = c.size();
+      if (s < 2 || s > clause_size_threshold)
+        continue;
+      const float w_pair = static_cast<float>(2.0 / (static_cast<double>(s) * static_cast<double>(s - 1)));
+
+      // Add both directions for each unordered pair in the clause
+      for (size_t i = 0; i + 1 < s; ++i)
+      {
+        const unsigned int u = static_cast<unsigned int>(std::abs(c[i]) - 1);
+        for (size_t j = i + 1; j < s; ++j)
+        {
+          const unsigned int v = static_cast<unsigned int>(std::abs(c[j]) - 1);
+          // u -> v
+          adj[u][v] += w_pair;
+          // v -> u
+          adj[v][u] += w_pair;
+        }
+      }
+    }
+
+    // Prefix-sum degrees and allocate CSR arrays
+    g.degrees.resize(n);
+    unsigned long cumulative = 0ul;
+    for (unsigned int u = 0; u < n; ++u)
+    {
+      cumulative += static_cast<unsigned long>(adj[u].size());
+      g.degrees[u] = cumulative;
+    }
+    g.nb_links = cumulative; // directed links (both directions stored)
+
+    g.links.resize(g.nb_links);
+    g.weights.resize(g.nb_links);
+
+    // Fill CSR
+    std::vector<unsigned long> write_pos(n, 0ul);
+    for (unsigned int u = 0; u < n; ++u)
+      write_pos[u] = (u == 0 ? 0ul : g.degrees[u - 1]);
+
+    double total_w = 0.0;
+    for (unsigned int u = 0; u < n; ++u)
+    {
+      std::vector<std::pair<unsigned int, float>> neigh(adj[u].begin(), adj[u].end());
+      // Optional: deterministic order by sorting neighbors
+      // std::sort(neigh.begin(), neigh.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+
+      for (const auto &kv : neigh)
+      {
+        const unsigned long p = write_pos[u]++;
+        g.links[p] = kv.first;
+        g.weights[p] = kv.second;
+        total_w += static_cast<double>(kv.second);
+      }
+    }
+
+    g.total_weight = total_w;
+    return g;
+  }
+}

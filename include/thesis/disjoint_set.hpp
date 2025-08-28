@@ -39,6 +39,9 @@ public:
     // Current number of disjoint components.
     unsigned components() const { return comp_count_; }
 
+    // Roots of the current forest
+    std::vector<unsigned> roots() const;
+
 private:
     std::vector<unsigned> parent_;
     std::vector<unsigned char> rank_; // 8-bit rank is typically sufficient

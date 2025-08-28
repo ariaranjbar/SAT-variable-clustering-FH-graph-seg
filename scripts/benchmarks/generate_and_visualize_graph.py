@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Generate graph CSVs (segmentation and VIG) for a given CNF file, then visualize them.
 
@@ -15,7 +15,7 @@ Requirements:
   - Python deps (for visualization): matplotlib, networkx
 
 Usage:
-  python3 scripts/benchmarks/generate_and_visualize_graph.py <path/to/file.cnf[.xz]>
+  python scripts/benchmarks/generate_and_visualize_graph.py <path/to/file.cnf[.xz]>
 """
 
 from __future__ import annotations

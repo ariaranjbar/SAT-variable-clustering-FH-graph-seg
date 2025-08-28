@@ -169,9 +169,26 @@
         "${threads}",
         "--maxbuf",
         "${maxbuf}",
+        "${no_norm_flag}",
+        "--size-exp",
+        "${size_exp}",
+        "--norm-sample",
+        "${norm_sample}",
+        "${no_mod_guard_flag}",
+        "--gamma",
+        "${gamma}",
+        "${no_anneal_guard_flag}",
+        "--dq-tol0",
+        "${dq_tol0}",
+        "--dq-vscale",
+        "${dq_vscale}",
+        "--ambiguous",
+        "${ambiguous}",
+        "--gate-margin",
+  "${gate_margin}",
         "--comp-out",
         "${comp_out_dir}",
-  "--output-base",
+        "--output-base",
         "${comp_base}"
       ],
       "base_params": { "threads": 1 },
@@ -183,6 +200,34 @@
           "enum": ["naive", "opt"],
           "default": ["opt"],
           "help": "Comma list of implementations (naive,opt)"
+        },
+        {
+          "name": "size_exp",
+          "cli": "--size-exp",
+          "type": "float",
+          "default": [1.2],
+          "numeric": "float",
+          "min": 0.0,
+          "help": "Exponent for |C| in gate denominator"
+        },
+        {
+          "name": "no_norm_flag",
+          "map_to": "no_norm_flag",
+          "cli": "--norm-mode",
+          "type": "string",
+          "enum": ["", "--no-norm"],
+          "default": [""],
+          "help": "Normalization mode: '' (on) or --no-norm (off)"
+        },
+        {
+          "name": "norm_sample",
+          "cli": "--norm-samples",
+          "type": "int",
+          "default": [1000],
+          "numeric": "int",
+          "min": 1,
+          "when": { "not": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } } },
+          "help": "Top edges to sample for normalization"
         },
         {
           "name": "tau",
@@ -222,18 +267,119 @@
           "min": 1,
           "when": { "equals": { "key": "impl", "value": "opt" } },
           "help": "Max buffer for opt"
+        },
+        {
+          "name": "no_mod_guard_flag",
+          "map_to": "no_mod_guard_flag",
+          "cli": "--mod-guard",
+          "type": "string",
+          "enum": ["", "--no-mod-guard"],
+          "default": [""],
+          "help": "Modularity guard: '' (on) or --no-mod-guard (off)"
+        },
+        {
+          "name": "gamma",
+          "cli": "--gammas",
+          "type": "float",
+          "default": [1.0],
+          "numeric": "float",
+          "min": 0,
+          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "help": "Modularity resolution gamma"
+        },
+        {
+          "name": "no_anneal_guard_flag",
+          "map_to": "no_anneal_guard_flag",
+          "cli": "--anneal-guard",
+          "type": "string",
+          "enum": ["", "--no-anneal-guard"],
+          "default": [""],
+          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "help": "Annealing: '' (on) or --no-anneal-guard (off)"
+        },
+        {
+          "name": "dq_tol0",
+          "cli": "--dq-tols",
+          "type": "float",
+          "default": [0.0005],
+          "numeric": "float",
+          "min": 0,
+          "when": { "and": [
+            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+            { "not": { "equals": { "key": "no_anneal_guard_flag", "value": "--no-anneal-guard" } } }
+          ] },
+          "help": "Initial ΔQ tolerance"
+        },
+        {
+          "name": "dq_vscale",
+          "cli": "--dq-vscales",
+          "type": "float",
+          "default": [0.0],
+          "numeric": "float",
+          "min": 0,
+          "when": { "and": [
+            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+            { "not": { "equals": { "key": "no_anneal_guard_flag", "value": "--no-anneal-guard" } } }
+          ] },
+          "help": "Annealing scale (0 => auto)"
+        },
+        {
+          "name": "ambiguous",
+          "cli": "--ambiguous-policies",
+          "type": "string",
+          "enum": ["accept", "reject", "margin"],
+          "default": ["margin"],
+          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "help": "Ambiguous policy"
+        },
+        {
+          "name": "gate_margin",
+          "cli": "--gate-margins",
+          "type": "float",
+          "default": [0.05],
+          "numeric": "float",
+          "min": 0,
+          "when": { "and": [
+            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+            { "equals": { "key": "ambiguous", "value": "margin" } }
+          ] },
+          "help": "Gate margin ratio for 'margin' policy"
+  },
+        {
+          "name": "write_components",
+          "cli": "--write-components",
+          "type": "string",
+          "enum": ["on", "off"],
+          "default": ["off"],
+          "help": "Whether to emit components CSVs (controls comp-out/output-base auto params)"
         }
       ],
       "auto_params": [
         {
+          "name": "normalize",
+          "template": "off",
+          "join_out_dir": false,
+          "when": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } }
+        },
+        {
+          "name": "normalize",
+          "template": "on",
+          "join_out_dir": false,
+          "when": {
+            "not": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } }
+          }
+        },
+        {
           "name": "comp_out_dir",
           "template": "components/${algo}/tau_${tau}/k_${k}",
-          "join_out_dir": true
+          "join_out_dir": true,
+          "when": { "equals": { "key": "write_components", "value": "on" } }
         },
         {
           "name": "comp_base",
           "template": "${file_root}",
-          "join_out_dir": false
+          "join_out_dir": false,
+          "when": { "equals": { "key": "write_components", "value": "on" } }
         }
       ],
       "csv": {
@@ -245,10 +391,24 @@
           "k",
           "threads",
           "maxbuf",
+          "size_exp",
+          "norm_sample",
+          "normalize",
+          "modGuard",
+          "gamma",
+          "anneal",
+          "dqTol0",
+          "dqVscale",
+          "amb",
+          "gateMargin",
+          "modGateAcc",
+          "modGateRej",
+          "modGateAmb",
           "memlimit_mb",
           "vars",
           "edges",
           "comps",
+          "modularity",
           "keff",
           "gini",
           "pmax",
@@ -263,6 +423,7 @@
           "vars",
           "edges",
           "comps",
+          "modularity",
           "keff",
           "gini",
           "pmax",
@@ -273,7 +434,105 @@
           "threads",
           "agg_memory"
         ],
-        "key_cols": [0, 1, 2, 3, 4, 5]
+        "key_cols": [0, 1, 2, 3, 4, 5, 6, 7, 8]
+      }
+    },
+    {
+      "name": "louvain",
+      "help": "Run Louvain community detection on the VIG",
+      "discover": [
+        "build/algorithms/louvain/louvain",
+        "build/algorithms/louvain/Debug/louvain",
+        "build/algorithms/louvain/Release/louvain",
+        "build/louvain"
+      ],
+      "cmd_template": [
+        "${bin}",
+        "-i",
+        "${input}",
+        "--tau",
+        "${tau}",
+        "--nb-pass",
+        "${nb_pass}",
+        "--min-mod",
+        "${min_mod}",
+        "--graph-out",
+        "${graph_base}"
+      ],
+      "base_params": {},
+      "params": [
+        {
+          "name": "tau",
+          "cli": "--taus",
+          "type": "string",
+          "default": ["3", "5", "10", "inf"],
+          "allow_inf": true,
+          "numeric": "int",
+          "min": 2,
+          "help": "Comma list of taus (>=2 or inf)"
+        },
+        {
+          "name": "nb_pass",
+          "cli": "--nb-pass",
+          "type": "int",
+          "default": [-1],
+          "numeric": "int",
+          "help": "Max passes per level (-1 = converge)"
+        },
+        {
+          "name": "min_mod",
+          "cli": "--min-mod",
+          "type": "float",
+          "default": [1e-7],
+          "numeric": "float",
+          "min": 0,
+          "help": "Minimum modularity improvement per pass"
+        },
+        {
+          "name": "write_graph",
+          "cli": "--write-graph",
+          "type": "string",
+          "enum": ["on", "off"],
+          "default": ["off"],
+          "help": "Emit Louvain graph CSVs (controls --graph-out base)"
+        }
+      ],
+      "auto_params": [
+        {
+          "name": "graph_base",
+          "template": "graphs/${algo}/tau_${tau}/${file_root}",
+          "join_out_dir": true,
+          "when": { "equals": { "key": "write_graph", "value": "on" } }
+        }
+      ],
+      "csv": {
+        "path": "louvain_results.csv",
+        "header": [
+          "file",
+          "tau",
+          "nb_pass",
+          "min_mod",
+          "memlimit_mb",
+          "vars",
+          "comps",
+          "mod0",
+          "mod1",
+          "improved",
+          "total_sec",
+          "parse_sec",
+          "louvain_graph_sec",
+          "louvain_sec"
+        ],
+        "required_keys": [
+          "vars",
+          "comps",
+          "mod0",
+          "mod1",
+          "improved",
+          "total_sec",
+          "tau"
+        ],
+        "key_cols": [0, 1, 2, 3]
       }
     }
   ]

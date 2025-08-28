@@ -93,7 +93,13 @@ bool ArgParser::parse(int argc, char** argv) {
                 present_[io->spec.longName] = true;
             }
         } else if (tok.rfind('-', 0) == 0 && tok.size() >= 2) {
-            // short option, no bundling support (e.g. -abc), keep simple
+            // Short option handling. We intentionally do NOT support single-dash
+            // long options or short-option bundling. Reject tokens like "-foo" or
+            // "-abc" to avoid ambiguity; require "--foo" for long options.
+            if (tok.size() > 2) {
+                throw std::runtime_error(std::string("invalid short option or cluster: ") + tok +
+                                         ". Use --<long> for long options.");
+            }
             char c = tok[1];
             const InternalOpt* io = find_short(c);
             if (!io) throw std::runtime_error(std::string("unknown option '-") + c + "'");
@@ -187,8 +193,8 @@ std::string ArgParser::usage(const std::string& progName) const {
     for (const auto& io : opts_) {
         if (io.spec.longName == "help") continue; // implicit
         oss << (io.spec.required ? "" : "[");
-        if (io.spec.shortName) oss << "-" << io.spec.shortName << "|";
-        oss << "--" << io.spec.longName;
+    if (io.spec.shortName) oss << "-" << io.spec.shortName << "|";
+    oss << "--" << io.spec.longName;
         if (io.spec.type != ArgType::Flag) {
             oss << " " << (io.spec.valueName.empty() ? "VAL" : io.spec.valueName);
         }
@@ -201,6 +207,9 @@ std::string ArgParser::help(const std::string& progName) const {
     std::ostringstream oss;
     if (!desc_.empty()) oss << desc_ << "\n";
     oss << usage(progName) << "\n\nOptions:\n";
+    oss << "  Note: short options use a single dash and one letter (e.g., -i).\n";
+    oss << "        long options require two dashes (e.g., --input).\n";
+    oss << "        Single-dash multi-letter tokens like '-input' are not accepted.\n";
     for (const auto& io : opts_) {
         if (io.spec.longName == "help") continue; // show help last
         oss << "  ";

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Visualize graph CSVs produced by --graph-out (nodes and edges files).
 
@@ -7,7 +7,7 @@ Inputs:
   - edges CSV: must have columns 'u','v','w' (weight is used to scale edge width).
 
 Example:
-  python3 scripts/visualize_graph.py \
+  python scripts/visualize_graph.py \
     --nodes scripts/benchmarks/out/graphs/graph_output.seg.node.csv \
     --edges scripts/benchmarks/out/graphs/graph_output.seg.edges.csv \
     --out   scripts/benchmarks/out/graphs/graph_output.seg.png \
@@ -20,7 +20,7 @@ Dependencies (recommended via conda env 'thesis-bench'):
   - networkx
 
 Install (optional):
-  python3 -m pip install --user matplotlib networkx
+  python -m pip install --user matplotlib networkx
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ try:
     import networkx as nx
 except Exception as e:
     sys.stderr.write(
-        "Missing dependencies. Please install with:\n  python3 -m pip install --user matplotlib networkx\n\nError: %s\n"
+        "Missing dependencies. Please install with:\n  python -m pip install --user matplotlib networkx\n\nError: %s\n"
         % e
     )
     sys.exit(1)

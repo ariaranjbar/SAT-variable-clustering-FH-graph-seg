@@ -11,7 +11,7 @@ It runs:
 Usage:
 
 ```bash
-python3 scripts/benchmarks/generate_and_visualize_graph.py path/to/input.cnf.xz
+python scripts/benchmarks/generate_and_visualize_graph.py path/to/input.cnf.xz
 ```
 
 Details:
