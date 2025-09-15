@@ -16,7 +16,6 @@ int main(int argc, char** argv) {
 
     ArgParser cli("Compute Louvain community structure on the VIG of a CNF");
     cli.add_option(OptionSpec{.longName = "input", .shortName = 'i', .type = ArgType::String, .valueName = "FILE|-", .help = "Path to DIMACS CNF or '-' for stdin", .required = true});
-    cli.add_option(OptionSpec{.longName = "tau", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N|inf", .help = "Clause size threshold for VIG; use 'inf' for no limit", .required = false, .defaultValue = "inf", .allowInfToken = true});
     cli.add_option(OptionSpec{.longName = "nb-pass", .shortName = '\0', .type = ArgType::Int64, .valueName = "N", .help = "Max passes per Louvain level (-1 = until converge)", .required = false, .defaultValue = "-1"});
     cli.add_option(OptionSpec{.longName = "min-mod", .shortName = '\0', .type = ArgType::String, .valueName = "EPS", .help = "Minimum modularity improvement threshold per pass", .required = false, .defaultValue = "1e-7"});
     cli.add_option(OptionSpec{.longName = "graph-out", .shortName = '\0', .type = ArgType::String, .valueName = "BASE", .help = "Write Louvain graph CSVs to BASE.node.csv and BASE.edges.csv", .required = false, .defaultValue = ""});
@@ -29,8 +28,7 @@ int main(int argc, char** argv) {
     if (!proceed) { std::cout << cli.help(argv[0]); return 0; }
 
     const std::string path = cli.get_string("input");
-    const unsigned tau = static_cast<unsigned>(cli.get_uint64("tau"));
-    // No VIG builder selection here; Louvain graph is built directly from CNF.
+    // All clauses with size >=2 are included; no clause size cutoff.
 
     long long nb_pass_ll = cli.get_int64("nb-pass");
     if (nb_pass_ll < -1) nb_pass_ll = -1; // sanitize
@@ -48,7 +46,7 @@ int main(int argc, char** argv) {
 
     // Build Louvain graph directly from CNF
     Timer t_graph;
-    Louvain::Graph lg = Louvain::build_graph(cnf, tau);
+    Louvain::Graph lg = Louvain::build_graph(cnf);
     const double sec_graph = t_graph.sec();
 
     // Run Louvain passes until no improvement at current level
@@ -104,7 +102,7 @@ int main(int argc, char** argv) {
               << " louvain_graph_sec=" << sec_graph
               << " louvain_sec=" << sec_louvain
               << " total_sec=" << sec_total
-              << " tau=" << (tau == std::numeric_limits<unsigned>::max() ? -1 : (int)tau)
+              << " tau=-1" // retained field for backwards parsing compatibility; always -1 now
               << " mod0=" << mod0
               << " mod1=" << mod1
               << " comps=" << comps

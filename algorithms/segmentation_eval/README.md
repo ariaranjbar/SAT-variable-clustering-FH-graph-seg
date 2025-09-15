@@ -32,7 +32,7 @@ segmentation_eval -i <file.cnf|-> --out-csv <file.csv> [--tau N|inf] [--naive|--
   - --norms on|off[,..]     List of normalization on/off values (fallback to --no-norm if not provided)
   - --norm-sample N         Single value for top-edges sample size used for normalization (default 1000)
   - --norm-samples N[,..]   List of sample sizes
-  - --size-exp X[,..]       Size exponent(s) (default 1.2). 1.0 ≈ k/|C|
+  - --size-exp X[,..]       Size exponent(s) (default 1.95). 1.0 ≈ k/|C|
   - --mod-guard on|off[,..] List of modularity-guard on/off values (fallback to --no-mod-guard)
   - --gamma G[,..]          Modularity resolution(s) for the guard (default 1.0)
   - --anneal on|off[,..]    List of annealing on/off (fallback to --no-anneal-guard)
@@ -100,7 +100,7 @@ xz -dc path/to/formula.cnf.xz | segmentation_eval -i - --tau inf -k 25,50,75 --o
 
 ```bash
 segmentation_eval -i path/to/formula.cnf --tau 10 -k 10,30 \
-    --norms on,off --norm-samples 100,1000 --size-exp 1.0,1.2 \
+  --norms on,off --norm-samples 100,1000 --size-exp 1.0,1.95 \
     --mod-guard on,off --gamma 1.0,0.5 --anneal on,off \
     --dq-tol0 5e-4,1e-3 --dq-vscale 0,10 \
   --ambiguous accept,reject,margin --gate-margin 0.01,0.05 \

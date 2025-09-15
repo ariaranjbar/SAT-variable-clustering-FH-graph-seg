@@ -161,7 +161,7 @@ namespace thesis
     result.n = cnf.get_variable_count();
     const auto &clauses = cnf.get_clauses();
 
-    using detail::inv_binom2;
+    using detail::inv_binom2; // still used for legacy fallback path only
     using detail::pack_pair;
     using detail::unpack_pair;
 
@@ -179,13 +179,20 @@ namespace thesis
     Map agg;
     agg.reserve(static_cast<size_t>(cnf.get_clause_count() * 2u));
 
+    // Determine weighting (auto α from tau if caller used legacy signature).
+    Weighting W;
+    {
+      double eps = 1e-3; // consistent default epsilon
+      W.alpha = pick_alpha_tau_only(clause_size_threshold, eps);
+    }
+
     for (const auto &c : clauses)
     {
       const size_t s = c.size();
       if (s < 2 || s > clause_size_threshold)
         continue;
 
-      const double w_pair = inv_binom2(s);
+      const double w_pair = W.pair_weight(s);
       for (size_t i = 0; i + 1 < s; i++)
         for (size_t j = i + 1; j < s; j++)
         {
@@ -246,7 +253,22 @@ namespace thesis
                           std::size_t max_buffer_contributions,
                           unsigned num_threads)
   {
-    using detail::inv_binom2;
+    using detail::inv_binom2; // legacy formula used only if needed
+
+    // Derive weighting automatically for legacy signature.
+    Weighting W; W.alpha = pick_alpha_tau_only(clause_size_threshold, 1e-3);
+
+    // Forward to overload with explicit weighting.
+    return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions, num_threads, W);
+  }
+
+  VIG build_vig_optimized(const CNF &cnf,
+                          unsigned clause_size_threshold,
+                          std::size_t max_buffer_contributions,
+                          unsigned num_threads,
+                          const Weighting &weighting)
+  {
+    using detail::inv_binom2; // fallback if s beyond precomputed table
 
     VIG result;
     result.n = cnf.get_variable_count();
@@ -381,7 +403,7 @@ namespace thesis
     const size_t w_table_max = (max_clause_size_observed >= 2 ? max_clause_size_observed : 2);
     std::vector<float> w_table(w_table_max + 1, 0.0f);
     for (size_t s = 2; s <= w_table_max; ++s)
-      w_table[s] = static_cast<float>(inv_binom2(s));
+      w_table[s] = static_cast<float>(weighting.pair_weight(s));
 
     // Clause domain per worker
     std::vector<size_t> cbegin(t), cend(t);
@@ -511,7 +533,7 @@ namespace thesis
           // s is guaranteed <= clause_size_threshold and we recorded max_clause_size_observed accordingly
           // Ensure index is within table bounds.
           const float w_pair = (s <= w_table_max) ? w_table[s]
-                                                  : static_cast<float>(inv_binom2(s));
+                                                  : static_cast<float>(weighting.pair_weight(s));
           for (size_t i = 0; i + 1 < s; ++i)
           {
             const uint32_t u = static_cast<uint32_t>(std::abs(c[i]) - 1);
@@ -721,10 +743,15 @@ namespace Louvain
     return (error == 0);
   }
 
-  Graph build_graph(const thesis::CNF &cnf,
-                    unsigned clause_size_threshold)
+  Graph build_graph(const thesis::CNF &cnf)
   {
+    thesis::Weighting W; W.alpha = 1.0; // preserve legacy weighting unless caller provides different α
+    return build_graph(cnf, W);
+  }
 
+  Graph build_graph(const thesis::CNF &cnf,
+                    const thesis::Weighting &weighting)
+  {
     Graph g;
     const unsigned int n = cnf.get_variable_count();
     g.nb_nodes = n;
@@ -744,20 +771,15 @@ namespace Louvain
     for (const auto &c : clauses)
     {
       const size_t s = c.size();
-      if (s < 2 || s > clause_size_threshold)
-        continue;
-      const float w_pair = static_cast<float>(2.0 / (static_cast<double>(s) * static_cast<double>(s - 1)));
-
-      // Add both directions for each unordered pair in the clause
+      if (s < 2) continue; // skip unit / empty
+      const float w_pair = static_cast<float>(weighting.pair_weight(s));
       for (size_t i = 0; i + 1 < s; ++i)
       {
         const unsigned int u = static_cast<unsigned int>(std::abs(c[i]) - 1);
         for (size_t j = i + 1; j < s; ++j)
         {
           const unsigned int v = static_cast<unsigned int>(std::abs(c[j]) - 1);
-          // u -> v
           adj[u][v] += w_pair;
-          // v -> u
           adj[v][u] += w_pair;
         }
       }

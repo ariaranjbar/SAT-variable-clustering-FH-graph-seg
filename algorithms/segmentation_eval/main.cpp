@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     cli.add_option(OptionSpec{.longName = "input", .shortName = 'i', .type = ArgType::String, .valueName = "FILE|-", .help = "Path to DIMACS CNF or '-' for stdin", .required = true});
     cli.add_option(OptionSpec{.longName = "tau", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N|inf", .help = "Clause size threshold for user VIG; 'inf' for no limit", .required = false, .defaultValue = "inf", .allowInfToken = true});
     cli.add_option(OptionSpec{.longName = "out-csv", .shortName = '\0', .type = ArgType::String, .valueName = "FILE", .help = "Path to output CSV (required)", .required = true, .defaultValue = ""});
-    cli.add_option(OptionSpec{.longName = "k", .shortName = 'k', .type = ArgType::String, .valueName = "K[,K2,...]", .help = "Segmentation parameter(s); comma-separated doubles", .required = false, .defaultValue = "50.0"});
+    cli.add_option(OptionSpec{.longName = "k", .shortName = 'k', .type = ArgType::String, .valueName = "K[,K2,...]", .help = "Segmentation parameter(s); comma-separated doubles", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::kDefaultK)});
     cli.add_flag("naive", '\0', "Use naive VIG builder (single-threaded)");
     cli.add_flag("opt", '\0', "Use optimized VIG builder (default)");
     cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "N", .help = "Threads for optimized VIG build (0=auto)", .required = false, .defaultValue = "0"});
@@ -84,18 +84,29 @@ int main(int argc, char **argv) {
     // Booleans: offer list-style options; if not provided, derive from single flags where applicable.
     cli.add_option(OptionSpec{.longName = "norms", .shortName = '\0', .type = ArgType::String, .valueName = "on|off[,..]", .help = "List of normalization settings (on/off)", .required = false, .defaultValue = ""});
     cli.add_flag("no-norm", '\0', "Disable distance normalization in segmentation (single toggle if --norms not provided)");
-    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = "1000"});
+    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultNormSampleEdges)});
     cli.add_option(OptionSpec{.longName = "norm-samples", .shortName = '\0', .type = ArgType::String, .valueName = "N[,..]", .help = "List of norm-sample values", .required = false, .defaultValue = ""});
-    cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "E[,..]", .help = "Size exponent(s) in gate denominator", .required = false, .defaultValue = "1.2"});
+    cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "E[,..]", .help = "Size exponent(s) in gate denominator", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultSizeExponent)});
     cli.add_option(OptionSpec{.longName = "mod-guard", .shortName = '\0', .type = ArgType::String, .valueName = "on|off[,..]", .help = "List of modularity guard settings (on/off)", .required = false, .defaultValue = ""});
     cli.add_flag("no-mod-guard", '\0', "Disable modularity guard in segmentation (single toggle if --mod-guard not provided)");
-    cli.add_option(OptionSpec{.longName = "gamma", .shortName = '\0', .type = ArgType::String, .valueName = "G[,..]", .help = "Modularity resolution(s) for guard", .required = false, .defaultValue = "1.0"});
+    cli.add_option(OptionSpec{.longName = "gamma", .shortName = '\0', .type = ArgType::String, .valueName = "G[,..]", .help = "Modularity resolution(s) for guard", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultGamma)});
     cli.add_option(OptionSpec{.longName = "anneal", .shortName = '\0', .type = ArgType::String, .valueName = "on|off[,..]", .help = "List of annealing settings (on/off)", .required = false, .defaultValue = ""});
     cli.add_flag("no-anneal-guard", '\0', "Disable annealing of ΔQ tolerance (single toggle if --anneal not provided)");
-    cli.add_option(OptionSpec{.longName = "dq-tol0", .shortName = '\0', .type = ArgType::String, .valueName = "T[,..]", .help = "Initial ΔQ tolerance list", .required = false, .defaultValue = "5e-4"});
-    cli.add_option(OptionSpec{.longName = "dq-vscale", .shortName = '\0', .type = ArgType::String, .valueName = "S[,..]", .help = "ΔQ anneal scale list (0 => auto)", .required = false, .defaultValue = "0"});
-    cli.add_option(OptionSpec{.longName = "ambiguous", .shortName = '\0', .type = ArgType::String, .valueName = "accept|reject|margin[,..]", .help = "Ambiguous policy list", .required = false, .defaultValue = "margin"});
-    cli.add_option(OptionSpec{.longName = "gate-margin", .shortName = '\0', .type = ArgType::String, .valueName = "R[,..]", .help = "Gate margin ratio list for 'margin' policy", .required = false, .defaultValue = "0.05"});
+    {
+        std::ostringstream oss; oss << GraphSegmenterFH::Config::kDefaultDqTolerance0; // preserves scientific notation if any
+        cli.add_option(OptionSpec{.longName = "dq-tol0", .shortName = '\0', .type = ArgType::String, .valueName = "T[,..]", .help = "Initial ΔQ tolerance list", .required = false, .defaultValue = oss.str()});
+    }
+    cli.add_option(OptionSpec{.longName = "dq-vscale", .shortName = '\0', .type = ArgType::String, .valueName = "S[,..]", .help = "ΔQ anneal scale list (0 => auto)", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultDqVscale)});
+    {
+        // Translate default ambiguous policy enum to string
+        std::string ambDef = (GraphSegmenterFH::Config::kDefaultAmbiguousPolicy == GraphSegmenterFH::Config::Ambiguous::Accept) ? "accept" :
+                             (GraphSegmenterFH::Config::kDefaultAmbiguousPolicy == GraphSegmenterFH::Config::Ambiguous::Reject) ? "reject" : "margin";
+        cli.add_option(OptionSpec{.longName = "ambiguous", .shortName = '\0', .type = ArgType::String, .valueName = "accept|reject|margin[,..]", .help = "Ambiguous policy list", .required = false, .defaultValue = ambDef});
+    }
+    {
+        std::ostringstream oss; oss << GraphSegmenterFH::Config::kDefaultGateMarginRatio;
+        cli.add_option(OptionSpec{.longName = "gate-margin", .shortName = '\0', .type = ArgType::String, .valueName = "R[,..]", .help = "Gate margin ratio list for 'margin' policy", .required = false, .defaultValue = oss.str()});
+    }
 
     bool proceed = true;
     try { proceed = cli.parse(argc, argv); } catch (const std::exception &e) {
@@ -121,7 +132,9 @@ int main(int argc, char **argv) {
     if (cli.provided("norms")) {
         try { norms = parse_bool_list(cli.get_string("norms"), "norms"); } catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     } else {
-        norms = { !cli.get_flag("no-norm") };
+        // Default derives from Config constant; user can only disable via --no-norm flag
+        const bool base = GraphSegmenterFH::Config::kDefaultNormalizeDistances;
+        norms = { cli.get_flag("no-norm") ? false : base };
     }
     // norm-sample
     std::vector<unsigned long long> norm_samples;
@@ -133,37 +146,38 @@ int main(int argc, char **argv) {
     // size-exp
     std::vector<double> size_exps;
     try { size_exps = parse_double_list(cli.get_string("size-exp"), "size-exp"); } catch (const std::exception&) {
-        // fallback single
-        try { size_exps = { std::stod(cli.get_string("size-exp")) }; } catch (...) { size_exps = { 1.2 }; }
+        size_exps = { GraphSegmenterFH::Config::kDefaultSizeExponent }; // single fallback referencing centralized default
     }
     // mod-guard
     std::vector<bool> mod_guards;
     if (cli.provided("mod-guard")) {
         try { mod_guards = parse_bool_list(cli.get_string("mod-guard"), "mod-guard"); } catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     } else {
-        mod_guards = { !cli.get_flag("no-mod-guard") };
+        const bool base = GraphSegmenterFH::Config::kDefaultUseModularityGuard;
+        mod_guards = { cli.get_flag("no-mod-guard") ? false : base };
     }
     // gamma
     std::vector<double> gammas;
     try { gammas = parse_double_list(cli.get_string("gamma"), "gamma"); } catch (const std::exception&) {
-        try { gammas = { std::stod(cli.get_string("gamma")) }; } catch (...) { gammas = { 1.0 }; }
+        gammas = { GraphSegmenterFH::Config::kDefaultGamma };
     }
     // anneal
     std::vector<bool> anneals;
     if (cli.provided("anneal")) {
         try { anneals = parse_bool_list(cli.get_string("anneal"), "anneal"); } catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     } else {
-        anneals = { !cli.get_flag("no-anneal-guard") };
+        const bool base = GraphSegmenterFH::Config::kDefaultAnnealModularityGuard;
+        anneals = { cli.get_flag("no-anneal-guard") ? false : base };
     }
     // dq-tol0
     std::vector<double> dq_tols;
     try { dq_tols = parse_double_list(cli.get_string("dq-tol0"), "dq-tol0"); } catch (const std::exception&) {
-        try { dq_tols = { std::stod(cli.get_string("dq-tol0")) }; } catch (...) { dq_tols = { 5e-4 }; }
+        dq_tols = { GraphSegmenterFH::Config::kDefaultDqTolerance0 };
     }
     // dq-vscale
     std::vector<double> dq_vscales;
     try { dq_vscales = parse_double_list(cli.get_string("dq-vscale"), "dq-vscale"); } catch (const std::exception&) {
-        try { dq_vscales = { std::stod(cli.get_string("dq-vscale")) }; } catch (...) { dq_vscales = { 0.0 }; }
+        dq_vscales = { GraphSegmenterFH::Config::kDefaultDqVscale };
     }
     // ambiguous
     std::vector<std::string> ambs;
@@ -173,7 +187,7 @@ int main(int argc, char **argv) {
     // gate-margin
     std::vector<double> gate_margins;
     try { gate_margins = parse_double_list(cli.get_string("gate-margin"), "gate-margin"); } catch (const std::exception&) {
-        try { gate_margins = { std::stod(cli.get_string("gate-margin")) }; } catch (...) { gate_margins = { 0.05 }; }
+        gate_margins = { GraphSegmenterFH::Config::kDefaultGateMarginRatio };
     }
 
     // Helper to lower-case strings for policy checks

@@ -39,31 +39,47 @@ class GraphSegmenterFH {
 public:
     // Tunable knobs to control behavior while keeping defaults equivalent to classic FH.
     struct Config {
+            // Centralized default constants (single source of truth). All other
+            // code (CLI defaults, fallbacks, etc.) should reference ONLY these
+            // constants rather than duplicating literal values. To change a
+            // default, update it here and recompile.
+            static constexpr bool kDefaultNormalizeDistances = true;
+            static constexpr std::size_t kDefaultNormSampleEdges = 1000; // top edges for median
+            static constexpr double kDefaultSizeExponent = 1.95;         // empirical best average
+            static constexpr bool kDefaultUseModularityGuard = true;
+            static constexpr double kDefaultGamma = 1.0;
+            static constexpr bool kDefaultAnnealModularityGuard = true;
+            static constexpr double kDefaultDqTolerance0 = 5e-4;
+            static constexpr double kDefaultDqVscale = 0.0;              // 0 => auto
+            enum class Ambiguous {Accept, Reject, GateMargin};
+            static constexpr Ambiguous kDefaultAmbiguousPolicy = Ambiguous::GateMargin;
+            static constexpr double kDefaultGateMarginRatio = 0.05;      // 5% margin
+
         // Normalize distances by median of 1/w over top N edges so k is comparable across graphs.
-        bool normalize_distances = true;
-        std::size_t norm_sample_edges = 1000; // how many top edges to sample for median
+            bool normalize_distances = kDefaultNormalizeDistances;
+            std::size_t norm_sample_edges = kDefaultNormSampleEdges; // how many top edges to sample for median
         // Size exponent in the gate denominator: tau = k_eff / (|C|^sizeExponent)
         // - 1.0 reproduces FH (k/|C|)
         // - >1.0 makes merges harder for large components
         // - <1.0 makes merges easier for large components
-        double sizeExponent = 1.2;
+            double sizeExponent = kDefaultSizeExponent; // Best performing average in benchmarks
 
         // Modularity guard:
-        bool use_modularity_guard = true;   // turn on the ΔQ gate
-        double gamma = 1.0;                 // modularity resolution
+            bool use_modularity_guard = kDefaultUseModularityGuard;   // turn on the ΔQ gate
+            double gamma = kDefaultGamma;                 // modularity resolution
         // Annealing (optional): allow slight negative ΔQ for tiny comps; tighten as they grow.
-        bool anneal_modularity_guard = true;
+            bool anneal_modularity_guard = kDefaultAnnealModularityGuard;
         // initial tolerance (dimensionless ΔQ units). 5e-4 is conservative.
-        double dq_tolerance0 = 5e-4;
+            double dq_tolerance0 = kDefaultDqTolerance0;
         // scale for annealing; if 0, we auto-set to ~mean degree (2m/n).
-        double dq_vscale = 0.0;
-        enum class Ambiguous {Accept, Reject, GateMargin};
-        Ambiguous ambiguous_policy = Ambiguous::GateMargin;
-        double gate_margin_ratio = 0.05; // used only for GateMargin (e.g., 0.05 = need 5% room)
+            double dq_vscale = kDefaultDqVscale;
+            Ambiguous ambiguous_policy = kDefaultAmbiguousPolicy;
+            double gate_margin_ratio = kDefaultGateMarginRatio; // used only for GateMargin (e.g., 0.05 = need 5% room)
     };
 
     // Construct a segmenter for n nodes and parameter k.
-    explicit GraphSegmenterFH(unsigned n = 0, double k = 50.0);
+        static constexpr double kDefaultK = 50.0; // default k parameter
+        explicit GraphSegmenterFH(unsigned n = 0, double k = kDefaultK);
 
     // Reset to n nodes, clearing any previous state.
     void reset(unsigned n, double k);

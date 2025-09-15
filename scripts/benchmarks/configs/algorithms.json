@@ -205,10 +205,10 @@
           "name": "size_exp",
           "cli": "--size-exp",
           "type": "float",
-          "default": [1.2],
+          "default": [1.95],
           "numeric": "float",
           "min": 0.0,
-          "help": "Exponent for |C| in gate denominator"
+          "help": "Exponent for |C| in gate denominator (central default)"
         },
         {
           "name": "no_norm_flag",
@@ -308,7 +308,7 @@
             { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
             { "not": { "equals": { "key": "no_anneal_guard_flag", "value": "--no-anneal-guard" } } }
           ] },
-          "help": "Initial ΔQ tolerance"
+          "help": "Initial ΔQ tolerance (central default)"
         },
         {
           "name": "dq_vscale",
@@ -343,7 +343,7 @@
             { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
             { "equals": { "key": "ambiguous", "value": "margin" } }
           ] },
-          "help": "Gate margin ratio for 'margin' policy"
+          "help": "Gate margin ratio for 'margin' policy (central default)"
   },
         {
           "name": "write_components",

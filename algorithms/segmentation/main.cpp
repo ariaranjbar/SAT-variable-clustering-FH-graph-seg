@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     ArgParser cli("Segment the variable interaction graph (VIG) of a CNF.");
     cli.add_option(OptionSpec{.longName = "input", .shortName = 'i', .type = ArgType::String, .valueName = "FILE|-", .help = "Path to DIMACS CNF or '-' for stdin", .required = true});
     cli.add_option(OptionSpec{.longName = "tau", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N|inf", .help = "Clause size threshold for VIG; use 'inf' for no limit", .required = false, .defaultValue = "inf", .allowInfToken = true});
-    cli.add_option(OptionSpec{.longName = "k", .shortName = 'k', .type = ArgType::String, .valueName = "K", .help = "Segmentation parameter k (double)", .required = false, .defaultValue = "50.0"});
+    cli.add_option(OptionSpec{.longName = "k", .shortName = 'k', .type = ArgType::String, .valueName = "K", .help = "Segmentation parameter k (double)", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::kDefaultK)});
     cli.add_option(OptionSpec{.longName = "maxbuf", .shortName = '\0', .type = ArgType::Size, .valueName = "BYTES", .help = "VIG optimized builder max contributions buffer", .required = false, .defaultValue = "50000000"});
     cli.add_option(OptionSpec{.longName = "threads", .shortName = 't', .type = ArgType::UInt64, .valueName = "N", .help = "Threads for optimized VIG build (0=auto)", .required = false, .defaultValue = "0"});
     cli.add_option(OptionSpec{.longName = "comp-out", .shortName = '\0', .type = ArgType::String, .valueName = "DIR", .help = "Optional dir to write components CSV (auto-named: <cnf>_components.csv)", .required = false, .defaultValue = ""});
@@ -33,16 +33,25 @@ int main(int argc, char **argv)
     cli.add_option(OptionSpec{.longName = "cross-out", .shortName = '\0', .type = ArgType::String, .valueName = "DIR", .help = "Write strongest cross-component edges CSV into DIR as <base>_cross.csv (columns: u,v,w)", .required = false, .defaultValue = ""});
     // Segmentation behavior knobs
     cli.add_flag("no-norm", '\0', "Disable distance normalization in segmentation");
-    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = "1000"});
-    cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "X", .help = "Exponent for |C| in gate denominator (1.0 => k/|C|)", .required = false, .defaultValue = "1.2"});
+    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultNormSampleEdges)});
+    cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "X", .help = "Exponent for |C| in gate denominator (1.0 => k/|C|)", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultSizeExponent)});
     // Modularity guard knobs
     cli.add_flag("no-mod-guard", '\0', "Disable modularity guard (ΔQ tests)");
-    cli.add_option(OptionSpec{.longName = "gamma", .shortName = '\0', .type = ArgType::String, .valueName = "G", .help = "Modularity resolution gamma", .required = false, .defaultValue = "1.0"});
+    cli.add_option(OptionSpec{.longName = "gamma", .shortName = '\0', .type = ArgType::String, .valueName = "G", .help = "Modularity resolution gamma", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultGamma)});
     cli.add_flag("no-anneal-guard", '\0', "Disable annealing of ΔQ tolerance (use fixed 0)");
-    cli.add_option(OptionSpec{.longName = "dq-tol0", .shortName = '\0', .type = ArgType::String, .valueName = "T", .help = "Initial ΔQ tolerance (e.g., 1e-3)", .required = false, .defaultValue = "5e-4"});
-    cli.add_option(OptionSpec{.longName = "dq-vscale", .shortName = '\0', .type = ArgType::String, .valueName = "S", .help = "Scale for tolerance annealing; 0 => auto (~mean degree)", .required = false, .defaultValue = "0"});
-    cli.add_option(OptionSpec{.longName = "ambiguous", .shortName = '\0', .type = ArgType::String, .valueName = "POLICY", .help = "Ambiguous policy: accept|reject|margin", .required = false, .defaultValue = "margin"});
-    cli.add_option(OptionSpec{.longName = "gate-margin", .shortName = '\0', .type = ArgType::String, .valueName = "RATIO", .help = "Gate margin ratio for 'margin' policy (e.g., 0.05)", .required = false, .defaultValue = "0.05"});
+    {
+        std::ostringstream ossTol; ossTol << GraphSegmenterFH::Config::kDefaultDqTolerance0;
+        cli.add_option(OptionSpec{.longName = "dq-tol0", .shortName = '\0', .type = ArgType::String, .valueName = "T", .help = "Initial ΔQ tolerance (e.g., 1e-3)", .required = false, .defaultValue = ossTol.str()});
+    }
+    cli.add_option(OptionSpec{.longName = "dq-vscale", .shortName = '\0', .type = ArgType::String, .valueName = "S", .help = "Scale for tolerance annealing; 0 => auto (~mean degree)", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultDqVscale)});
+    {
+        std::string ambDef = (GraphSegmenterFH::Config::kDefaultAmbiguousPolicy == GraphSegmenterFH::Config::Ambiguous::Accept) ? "accept" : (GraphSegmenterFH::Config::kDefaultAmbiguousPolicy == GraphSegmenterFH::Config::Ambiguous::Reject ? "reject" : "margin");
+        cli.add_option(OptionSpec{.longName = "ambiguous", .shortName = '\0', .type = ArgType::String, .valueName = "POLICY", .help = "Ambiguous policy: accept|reject|margin", .required = false, .defaultValue = ambDef});
+    }
+    {
+        std::ostringstream ossGM; ossGM << GraphSegmenterFH::Config::kDefaultGateMarginRatio;
+        cli.add_option(OptionSpec{.longName = "gate-margin", .shortName = '\0', .type = ArgType::String, .valueName = "RATIO", .help = "Gate margin ratio for 'margin' policy (e.g., 0.05)", .required = false, .defaultValue = ossGM.str()});
+    }
 
     bool proceed = true;
     try
@@ -70,7 +79,7 @@ int main(int argc, char **argv)
     if (!use_naive && !use_opt)
         use_opt = true;
 
-    double k = 50.0;
+    double k = GraphSegmenterFH::kDefaultK;
     try
     {
         k = std::stod(cli.get_string("k"));

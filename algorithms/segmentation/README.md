@@ -36,7 +36,7 @@ Segmentation behavior knobs:
 
 - --no-norm           Disable distance normalization (default: enabled)
 - --norm-sample N     Top edges sampled for normalization median (default: 1000)
-- --size-exp X        Size exponent in gate denominator (default: 1.2). 1.0 ≈ k/|C|
+- --size-exp X        Size exponent in gate denominator (default: 1.95). 1.0 ≈ k/|C|
 
 Modularity guard knobs (for ΔQ gating during merges):
 
@@ -48,7 +48,7 @@ Modularity guard knobs (for ΔQ gating during merges):
 - --ambiguous POLICY  Ambiguous policy: `accept`, `reject`, or `margin` (default: `margin`)
 - --gate-margin R     Gate margin ratio for `margin` policy (default: 0.05)
 
-Defaults: `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`, normalization on with `--norm-sample 1000`, `--size-exp 1.2`, modularity guard on with `--gamma 1.0`, annealing on, `--dq-tol0 5e-4`, `--dq-vscale 0`, ambiguous=`margin`, `--gate-margin 0.05`.
+Defaults (centralized in GraphSegmenterFH::Config): `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`, normalization on with `--norm-sample 1000`, `--size-exp 1.95`, modularity guard on with `--gamma 1.0`, annealing on, `--dq-tol0 5e-4`, `--dq-vscale 0`, ambiguous=`margin`, `--gate-margin 0.05`.
 
 ## Output (stdout)
 

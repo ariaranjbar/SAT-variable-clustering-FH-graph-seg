@@ -23,7 +23,7 @@ JSON config example:
   "k": "10,30,100",
   "norms": "on,off",
   "norm_samples": "100,1000",
-  "size_exp": "1.0,1.2",
+    "size_exp": "1.0,1.95",
   "mod_guard": "on,off",
   "gamma": "1.0,0.5",
   "anneal": "on,off",
