@@ -1,0 +1,17 @@
+{
+  "out_dir": "scripts/benchmarks/out",
+  "bench_dir": "benchmarks",
+  "files": { "count": 100 },
+  "algorithms": [
+    {
+      "name": "segmentation",
+      "parameters": {
+        "tau": ["100"],
+        "k": [100],
+        "threads": [0],
+        "write_components": ["on"]
+      },
+      "skip_existing": true
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import annotations
 import argparse
 import csv
 import os
@@ -11,9 +12,22 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set, Tuple, Union, Callable, TypedDict
 import hashlib
 import json
+
+# Load xz path from paths.json if available
+XZ_PATH = "xz"  # default
+PATHS_JSON = Path(__file__).parent / "configs" / "paths.json"
+if PATHS_JSON.exists():
+    try:
+        with PATHS_JSON.open() as f:
+            paths_cfg = json.load(f)
+        xz_path_val = paths_cfg.get("xz")
+        if xz_path_val:
+            XZ_PATH = str(xz_path_val)
+    except Exception:
+        pass
 
 # Notes
 # - Mirrors the behavior of run_vig_info_random.sh and run_segmentation_random.sh
@@ -35,9 +49,28 @@ OUT_DIR_DEFAULT = ROOT_DIR / "scripts/benchmarks/out"
 class ConfigError(Exception):
     pass
 
+# ---------------- Type helpers ----------------
+class AlgoCSVConfig(TypedDict, total=False):
+    path: str
+    header: List[str]
+    required_keys: List[str]
+    key_cols: List[int]
+
+class AlgorithmRegistryEntry(TypedDict, total=False):
+    name: str
+    help: str
+    discover: List[str]
+    cmd_template: List[str]
+    csv: AlgoCSVConfig
+    base_params: Dict[str, Union[str, int, float]]
+    params: List[Dict[str, Any]]
+    auto_params: List[Dict[str, Any]]
+
+Params = Dict[str, str]
+
 # -------------- Utility helpers --------------
 
-def vprint(enabled: bool, *args) -> None:
+def vprint(enabled: bool, *args: object) -> None:
     if enabled:
         print("[info]", *args, file=sys.stderr)
 
@@ -60,7 +93,7 @@ def list_bench_files(bench_dir: Path) -> List[Path]:
     return files
 
 
-def select_files(all_files: List[Path], n: int, reuse_csv: Optional[Path], bench_dir: Path, verbose: bool) -> List[Path]:
+def select_files(all_files: Sequence[Path], n: int, reuse_csv: Optional[Path], bench_dir: Path, verbose: bool) -> List[Path]:
     if reuse_csv is not None:
         if not reuse_csv.is_file():
             raise FileNotFoundError(f"Reuse CSV not found: {reuse_csv}")
@@ -96,7 +129,7 @@ def select_files(all_files: List[Path], n: int, reuse_csv: Optional[Path], bench
 # (tau-specific normalization removed; rely on generic schema constraints such as allow_inf, numeric, min/max)
 
 
-def build_keys_set(csv_path: Path, key_cols: List[int]) -> Optional[set]:
+def build_keys_set(csv_path: Path, key_cols: Sequence[int]) -> Optional[Set[str]]:
     if not csv_path.exists():
         return None
     keys = set()
@@ -122,7 +155,7 @@ def parse_summary_lines(lines: Iterable[str]) -> Dict[str, str]:
     return last_map
 
 
-def csv_append(csv_path: Path, header: List[str], row: List[str]) -> None:
+def csv_append(csv_path: Path, header: Sequence[str], row: Sequence[str]) -> None:
     new_file = not csv_path.exists()
     with csv_path.open("a", newline="") as f:
         w = csv.writer(f)
@@ -137,7 +170,7 @@ def os_is_darwin() -> bool:
 
 # -------------- Execution helpers --------------
 
-def run_with_streaming(cmd: List[str], infile: Path, log_path: Path, verbose: bool,
+def run_with_streaming(cmd: Sequence[str], infile: Path, log_path: Path, verbose: bool,
                        memlimit_mb: Optional[int] = None,
                        log_header: Optional[str] = None) -> Tuple[int, List[str]]:
     """Run `cmd` with stdin as xz -dc of infile (if .xz) or direct file via -i path,
@@ -159,26 +192,30 @@ def run_with_streaming(cmd: List[str], infile: Path, log_path: Path, verbose: bo
                 import resource
                 # RLIMIT_AS expects bytes on Linux
                 b = memlimit_mb * 1024 * 1024
-                resource.setrlimit(resource.RLIMIT_AS, (b, b))
+                resource.setrlimit(resource.RLIMIT_AS, (b, b))  # type: ignore[attr-defined]
             except Exception as e:
                 print(f"[warn] Failed to set memlimit: {e}", file=sys.stderr)
 
     try:
         if infile.suffix == ".xz":
-            # stream via xz -dc
-            xz_cmd = ["xz", "-dc", "--", str(infile)]
+            # stream via xz -dc, using XZ_PATH
+            xz_cmd = [XZ_PATH, "-dc", "--", str(infile)]
             if verbose:
                 vprint(True, "PIPE:", " ".join(shlex.quote(x) for x in xz_cmd), "|", " ".join(shlex.quote(x) for x in cmd))
             xz_proc = subprocess.Popen(xz_cmd, stdout=subprocess.PIPE)
             stdin_src = xz_proc.stdout
             # cmd expects -i - already present in cmd list
-            proc = subprocess.Popen(cmd, stdin=stdin_src, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, preexec_fn=set_memlimit if not os_is_darwin() else None)
+            if sys.platform == "win32":
+                proc = subprocess.Popen(cmd, stdin=stdin_src, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            else:
+                proc = subprocess.Popen(cmd, stdin=stdin_src, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, preexec_fn=set_memlimit if not os_is_darwin() else None)
         else:
             if verbose:
                 vprint(True, "RUN:", " ".join(shlex.quote(x) for x in cmd))
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, preexec_fn=set_memlimit if not os_is_darwin() else None)
+            if sys.platform == "win32":
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            else:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, preexec_fn=set_memlimit if not os_is_darwin() else None)
 
         lines: List[str] = []
         with log_path.open("w") as logf:
@@ -212,7 +249,7 @@ def run_with_streaming(cmd: List[str], infile: Path, log_path: Path, verbose: bo
 
 # -------------- Generic config runner helpers --------------
 
-def _load_config(path: Path) -> dict:
+def _load_config(path: Path) -> Dict[str, Any]:
     try:
         import json
         if path.suffix.lower() in (".yaml", ".yml"):
@@ -231,7 +268,7 @@ def _load_config(path: Path) -> dict:
         raise ConfigError(f"Failed to parse config {path}: {e}")
 
 
-def _discover_bin_generic(target_name: str, roots: List[Path]) -> Optional[Path]:
+def _discover_bin_generic(target_name: str, roots: Sequence[Path]) -> Optional[Path]:
     """Search recursively under roots for an executable file named target_name.
     Returns the first match found."""
     for root in roots:
@@ -265,7 +302,7 @@ def _discover_bin_by_name(name: str) -> Optional[Path]:
     return _discover_bin_generic(name, [ROOT_DIR / "build"])
 
 
-def _eval_condition(cond: dict, params: Dict[str, str]) -> bool:
+def _eval_condition(cond: Mapping[str, Any], params: Params) -> bool:
     """Evaluate simple condition objects on current params.
     Supported:
     - {"equals": {"key": "impl", "value": "opt"}}
@@ -277,13 +314,25 @@ def _eval_condition(cond: dict, params: Dict[str, str]) -> bool:
     if not cond:
         return True
     if "equals" in cond:
-        obj = cond["equals"] or {}
-        key = obj.get("key"); val = obj.get("value")
-        return str(params.get(key, "")) == str(val)
+        obj = cond.get("equals") or {}
+        key_any = obj.get("key")
+        if not isinstance(key_any, str):
+            return False
+        val = obj.get("value")
+        return str(params.get(key_any, "")) == str(val)
     if "in" in cond:
-        obj = cond["in"] or {}
-        key = obj.get("key"); vals = obj.get("values", [])
-        return str(params.get(key, "")) in [str(v) for v in vals]
+        obj = cond.get("in") or {}
+        key_any = obj.get("key")
+        if not isinstance(key_any, str):
+            return False
+        vals = obj.get("values", [])
+        iter_vals: List[str] = []
+        try:
+            for v in vals:
+                iter_vals.append(str(v))
+        except Exception:
+            iter_vals = []
+        return str(params.get(key_any, "")) in iter_vals
     if "and" in cond:
         arr = cond.get("and") or []
         return all(_eval_condition(c, params) for c in arr)
@@ -296,7 +345,7 @@ def _eval_condition(cond: dict, params: Dict[str, str]) -> bool:
     return False
 
 
-def _expand_values(spec: dict, key: str) -> List[str]:
+def _expand_values(spec: Mapping[str, Any], key: str) -> List[str]:
     """Expand a value spec to a list of string values.
     Supported forms:
     - scalar: 42, "inf"
@@ -323,7 +372,7 @@ def _expand_values(spec: dict, key: str) -> List[str]:
 # (legacy per-param normalizers removed; validation happens when building param specs)
 
 
-def _product_sweep(param_specs: List[dict], base_params: Dict[str, str]) -> List[Dict[str, str]]:
+def _product_sweep(param_specs: List[Dict[str, Any]], base_params: Params) -> List[Params]:
     """Generate a list of parameter dicts by applying each param spec with conditions.
     param_specs example entries:
       {"name":"impl", "values":["naive","opt"]}
@@ -355,7 +404,7 @@ def _product_sweep(param_specs: List[dict], base_params: Dict[str, str]) -> List
     return combos
 
 
-def _format_cmd(cmd_template: List[str], params: Dict[str, str], infile: Path, bin_path: Optional[Path] = None) -> List[str]:
+def _format_cmd(cmd_template: Sequence[str], params: Params, infile: Path, bin_path: Optional[Path] = None) -> List[str]:
     # Replace ${key} occurrences with params[key]; special token ${input} becomes '-' or file path
     # If template references ${bin}, ensure it's resolved
     p = dict(params)
@@ -397,14 +446,14 @@ def _format_cmd(cmd_template: List[str], params: Dict[str, str], infile: Path, b
     return tokens
 
 
-def _subst_template(tmpl: str, vars_map: Dict[str, str]) -> str:
+def _subst_template(tmpl: str, vars_map: Mapping[str, str]) -> str:
     s = str(tmpl)
     for k, v in vars_map.items():
         s = s.replace(f"${{{k}}}", str(v))
     return s
 
 
-def _compute_auto_params(algo_cfg: dict, combo: Dict[str, str], out_dir: Path, algo_name: str, file_path: Optional[Path]) -> Dict[str, str]:
+def _compute_auto_params(algo_cfg: Mapping[str, Any], combo: Params, out_dir: Path, algo_name: str, file_path: Optional[Path]) -> Dict[str, str]:
     """Compute algorithm-specific auto-generated parameters.
     Schema per entry:
         {"name": "param_name", "template": "relative/or/absolute/with/${vars}", "join_out_dir": true|false, "when": { ... }}
@@ -470,7 +519,7 @@ def _slug_value(val: str, max_len: int = 80) -> str:
     return s
 
 
-def _params_tag(params: Dict[str, str], exclude_keys: Optional[List[str]] = None) -> str:
+def _params_tag(params: Params, exclude_keys: Optional[Sequence[str]] = None) -> str:
     """Build a compact, filesystem-safe tag from params for log filenames.
     exclude_keys: parameter names to skip (e.g., long path-like values).
     """
@@ -484,7 +533,7 @@ def _params_tag(params: Dict[str, str], exclude_keys: Optional[List[str]] = None
     return ".".join(parts)
 
 
-def _short_hash_tag(params: Dict[str, str], extra: Optional[Dict[str, str]] = None, length: int = 12) -> str:
+def _short_hash_tag(params: Params, extra: Optional[Mapping[str, str]] = None, length: int = 12) -> str:
     """Build a short, stable hash tag from params and optional extras.
     Uses SHA1 over a JSON dump with sorted keys, then returns first `length` hex chars.
     """
@@ -496,7 +545,7 @@ def _short_hash_tag(params: Dict[str, str], extra: Optional[Dict[str, str]] = No
     return h[:max(8, min(40, length))]
 
 
-def _parse_required_keys(lines: List[str], required: List[str]) -> Optional[Dict[str, str]]:
+def _parse_required_keys(lines: Sequence[str], required: Sequence[str]) -> Optional[Dict[str, str]]:
     m = parse_summary_lines(lines)
     return m if all(k in m for k in required) else None
 
@@ -669,7 +718,7 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                     cached_path = Path(tf.name)
                 try:
                     with open(cached_path, "wb") as out:
-                        subprocess.run(["xz", "-dc", "--", str(fpath)], check=True, stdout=out)
+                        subprocess.run([XZ_PATH, "-dc", "--", str(fpath)], check=True, stdout=out)
                     vprint(verbose, f"Decompressed once: {fpath} -> {cached_path}")
                 except subprocess.CalledProcessError:
                     print(f"Failed to decompress {fpath} to {cached_path}", file=sys.stderr)
@@ -693,11 +742,11 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                                 pre_vals.append("" if ml is None else str(ml))
                             else:
                                 pre_vals.append(combo2.get(col, ""))
-                        for idx in key_cols:
+                        for idx in (key_cols or []):
                             if pre_vals[idx] == "":
                                 unresolved = True
                                 break
-                        if not unresolved:
+                        if not unresolved and key_cols is not None:
                             pre_key = ",".join(pre_vals[i] for i in key_cols)
                             if pre_key in keys:
                                 vprint(verbose, f"Skip existing: {pre_key}")
@@ -707,7 +756,7 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                     cmd = _format_cmd([str(x) for x in cmd_template], combo2, use_path, bin_path=bin_path)
                     stamp = time.strftime("%Y%m%d-%H%M%S")
                     rand = f"{random.randrange(16**6):06x}"
-                    short = _short_hash_tag(combo2, {"file": display_base, "mem": ml})
+                    short = _short_hash_tag(combo2, {"file": display_base, "mem": "" if ml is None else str(ml)})
                     ml_tag = f".m{ml}mb" if ml is not None else ""
                     safe_base = _slug_value(display_base, max_len=80)
                     log = out_dir / f"{safe_base}.{name}.{short}.{rand}{ml_tag}.{stamp}.log"
@@ -739,11 +788,12 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
                                     row_vals.append(m.get(col, combo2.get(col, "")))
                             if keys is not None:
                                 key_cols = csv_obj.get("key_cols")
-                                key = ",".join(row_vals[i] for i in key_cols)
-                                if key in keys:
-                                    vprint(verbose, f"Skip existing: {key}")
-                                    ok = True
-                                    continue
+                                if key_cols is not None:
+                                    key = ",".join(row_vals[i] for i in key_cols)
+                                    if key in keys:
+                                        vprint(verbose, f"Skip existing: {key}")
+                                        ok = True
+                                        continue
                             csv_append(csv_path, header, row_vals)
                             ok = True
                     finally:
@@ -766,7 +816,7 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
 
 # -------------- Dynamic algorithm registry mode --------------
 
-def _load_algorithms_registry(path: Optional[Path] = None) -> Dict[str, dict]:
+def _load_algorithms_registry(path: Optional[Path] = None) -> Dict[str, AlgorithmRegistryEntry]:
     registry_path = path or (ROOT_DIR / "scripts/benchmarks/configs/algorithms.json")
     if not registry_path.exists():
         raise ConfigError(f"Algorithms registry not found: {registry_path}")
@@ -801,7 +851,7 @@ def _dest_from_cli(cli_flag: str) -> str:
     return cli_flag.lstrip('-').replace('-', '_')
 
 
-def _parse_type_from_schema(t: str):
+def _parse_type_from_schema(t: str) -> Callable[[str], List[Any]]:
     if t == 'int':
         return parse_int_list
     if t == 'float':
@@ -815,7 +865,7 @@ def _coerce_numeric(val: str, kind: str) -> float:
     return float(val)
 
 
-def _validate_and_normalize_param_values(name: str, values: List[str], pdef: dict, user_provided: bool) -> List[str]:
+def _validate_and_normalize_param_values(name: str, values: List[str], pdef: Mapping[str, Any], user_provided: bool) -> List[str]:
     """Apply normalization and constraints from pdef to the list of values.
     Supports:
       - pdef.normalize == 'tau' (keeps >=2 or 'inf')
@@ -866,7 +916,7 @@ def _validate_and_normalize_param_values(name: str, values: List[str], pdef: dic
     return raw_vals
 
 
-def _discover_bin_from_cfg(algo_name: str, algo_cfg: dict, explicit: Optional[Path]) -> Optional[Path]:
+def _discover_bin_from_cfg(algo_name: str, algo_cfg: Mapping[str, Any], explicit: Optional[Path]) -> Optional[Path]:
     if explicit is not None:
         return explicit
     # Try discover list from cfg
@@ -878,7 +928,7 @@ def _discover_bin_from_cfg(algo_name: str, algo_cfg: dict, explicit: Optional[Pa
     return _discover_bin_by_name(algo_name)
 
 
-def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg: dict) -> int:
+def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg: Mapping[str, Any]) -> int:
     ensure_out_dir(ns.out_dir)
 
     # Binary
@@ -919,21 +969,20 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
     for pdef in params_schema:
         cli = pdef.get("cli")
         name = pdef.get("name")
-        map_to = pdef.get("map_to") or name
-        if not cli or not name:
+        map_to_val = pdef.get("map_to")
+        map_to: Optional[str] = map_to_val if isinstance(map_to_val, str) else name
+        if not cli or not isinstance(name, str) or not isinstance(map_to, str):
             raise ConfigError(f"Param definition requires 'name' and 'cli': {pdef}")
-        dest = _dest_from_cli(cli)
+        dest = _dest_from_cli(str(cli))
         values = getattr(ns, dest, None)
         if values is None:
             # fall back to config default
             values = pdef.get("default", [])
-        # Normalize/validate against schema
         user_provided = getattr(ns, dest, None) is not None
-        values = _validate_and_normalize_param_values(map_to, [str(v) for v in values], pdef, user_provided)
-        # Skip if no values remain
-        if not values:
+        norm_values = _validate_and_normalize_param_values(map_to, [str(v) for v in values], pdef, user_provided)
+        if not norm_values:
             continue
-        spec = {"name": map_to, "values": values}
+        spec = {"name": map_to, "values": norm_values}
         if pdef.get("when") is not None:
             spec["when"] = pdef.get("when")
         param_specs.append(spec)
@@ -948,7 +997,7 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                 cached_path = Path(tf.name)
             try:
                 with open(cached_path, 'wb') as out:
-                    subprocess.run(["xz","-dc","--",str(fpath)], check=True, stdout=out)
+                    subprocess.run([XZ_PATH,"-dc","--",str(fpath)], check=True, stdout=out)
                 vprint(ns.verbose, f"Decompressed once: {fpath} -> {cached_path}")
             except subprocess.CalledProcessError:
                 print(f"Failed to decompress {fpath} to {cached_path}", file=sys.stderr)
@@ -970,7 +1019,7 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                 ml_tag = f".mem{ml}mb" if ml is not None else ""
                 safe_base = _slug_value(display_base, max_len=80)
                 rand = f"{random.randrange(16**6):06x}"
-                short = _short_hash_tag(combo2, {"file": display_base, "mem": ml})
+                short = _short_hash_tag(combo2, {"file": display_base, "mem": "" if ml is None else str(ml)})
                 log = ns.out_dir / f"{safe_base}.{algo_name}.{short}.{rand}{ml_tag}.{stamp}.log"
 
                 if ns.dry_run:
@@ -988,11 +1037,14 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                             pre_vals.append("" if ml is None else str(ml))
                         else:
                             pre_vals.append(combo2.get(col, ""))
-                    if all(pre_vals[i] != "" for i in key_cols):
-                        pre_key = ",".join(pre_vals[i] for i in key_cols)
-                        if pre_key in keys:
-                            vprint(ns.verbose, f"Skip existing: {pre_key}")
-                            continue
+                    try:
+                        if all(isinstance(i, int) and pre_vals[i] != "" for i in key_cols):
+                            pre_key = ",".join(pre_vals[i] for i in key_cols if isinstance(i, int))
+                            if pre_key in keys:
+                                vprint(ns.verbose, f"Skip existing: {pre_key}")
+                                continue
+                    except Exception:
+                        pass
 
                 header_map = {
                     "timestamp": stamp,
@@ -1017,11 +1069,14 @@ def run_algorithm_from_registry(algo_name: str, ns: argparse.Namespace, algo_cfg
                         # Post-run skip-existing (safety)
                         if keys is not None:
                             key_cols = csv_cfg.get("key_cols", [])
-                            key = ",".join(row_vals[i] for i in key_cols)
-                            if key in keys:
-                                vprint(ns.verbose, f"Skip existing: {key}")
-                                ok = True
-                                continue
+                            try:
+                                key = ",".join(row_vals[i] for i in key_cols if isinstance(i, int))
+                                if key and key in keys:
+                                    vprint(ns.verbose, f"Skip existing: {key}")
+                                    ok = True
+                                    continue
+                            except Exception:
+                                pass
                         csv_append(csv_path, header, row_vals)
                         ok = True
                 finally:
@@ -1052,7 +1107,7 @@ def parse_str_list(s: str) -> List[str]:
     return [x.strip() for x in s.split(',') if x.strip() != '']
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Benchmark runner")
     sub = p.add_subparsers(dest="algo", required=True)
 

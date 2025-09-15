@@ -1,6 +1,5 @@
 {
   "min": {
-    "total_sec": 0.1,
     "comps": 3,
     "vars": 500
   },

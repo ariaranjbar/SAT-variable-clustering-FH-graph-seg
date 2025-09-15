@@ -20,7 +20,7 @@ import argparse
 import os
 import json
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple, Dict
+from typing import Iterable, List, Optional, Tuple, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -178,8 +178,15 @@ def _load_filter_config(path: Optional[Path]) -> Optional[Dict[str, Dict[str, fl
     """
     if path is None:
         return None
+    if not path.exists():
+        # Silently skip if config not present
+        return None
     with open(path, "r") as f:
-        cfg = json.load(f)
+        try:
+            cfg = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Warning: filter config {path} is not valid JSON; ignoring.")
+            return None
     out: Dict[str, Dict[str, float]] = {}
     for key in ("min", "max"):
         vals = cfg.get(key, {}) or {}
@@ -190,6 +197,8 @@ def _load_filter_config(path: Optional[Path]) -> Optional[Dict[str, Dict[str, fl
 
 def _load_results_index(results_csv: Path) -> Dict[str, Dict[str, float]]:
     """Index segmentation results by hash (derived from 'file' column). Returns dict[hash] -> row dict."""
+    if not results_csv.exists():
+        raise FileNotFoundError(f"Results CSV not found: {results_csv}")
     df = pd.read_csv(results_csv)
     if "file" not in df.columns:
         raise ValueError("segmentation_results.csv must contain a 'file' column")
@@ -209,7 +218,14 @@ def _row_value(row: Dict[str, float], key: str) -> Optional[float]:
     except Exception:
         return None
     try:
-        return float(pd.to_numeric(v))
+        # pd.to_numeric expects array-like or scalar; ensure scalar fallback
+        try:
+            return float(pd.to_numeric(v))  # type: ignore[arg-type]
+        except Exception:
+            try:
+                return float(v)  # type: ignore[arg-type]
+            except Exception:
+                return None
     except Exception:
         return None
 
@@ -335,9 +351,18 @@ def main():
     # Build families for labeling later
     # Determine family per input file and color map
     id_to_path: Dict[str, Path] = {label_to_id[lbl]: label_to_path[lbl] for lbl in label_sizes.keys()}
-    fam_by_path = families_for_csvs(id_to_path.values(), args.meta)
-    id_to_family: Dict[str, str] = {idv: fam_by_path[p] for idv, p in id_to_path.items()}
-    label_to_family: Dict[str, str] = {lbl: id_to_family[label_to_id[lbl]] for lbl in label_sizes.keys()}
+    # families_for_csvs may expect existing meta file; guard if absent
+    if args.meta.exists():
+        try:
+            fam_by_path = families_for_csvs(id_to_path.values(), args.meta)
+        except Exception as e:
+            print(f"Warning: failed to derive families from meta {args.meta}: {e}")
+            fam_by_path = {p: "unknown" for p in id_to_path.values()}
+    else:
+        print(f"Warning: meta file {args.meta} not found; assigning 'unknown' family.")
+        fam_by_path = {p: "unknown" for p in id_to_path.values()}
+    id_to_family: Dict[str, str] = {idv: fam_by_path.get(p, "unknown") for idv, p in id_to_path.items()}
+    label_to_family: Dict[str, str] = {lbl: id_to_family.get(label_to_id[lbl], "unknown") for lbl in label_sizes.keys()}
     id_map_path = _write_id_map(args.outdir, label_to_id, label_to_path, in_root, label_sizes, label_to_family)
 
     # Build series keyed by IDs for data, but color/group by family
@@ -357,9 +382,9 @@ def main():
         (0, (5, 1)),        # long dash
     ]
     fam_color: Dict[str, tuple] = {}
-    fam_style: Dict[str, any] = {}
+    fam_style: Dict[str, Any] = {}
     # Build interleaved combos: for each style row, shift styles per color column
-    combos: List[Tuple[tuple, any]] = []
+    combos: List[Tuple[tuple, Any]] = []
     m = len(linestyles)
     n = base_len
     for r in range(m):
@@ -378,7 +403,7 @@ def main():
     # Plot with per-family colors and family-only legend
     plt.figure(figsize=(10, 7))
     any_data = False
-    fam_handles: Dict[str, any] = {}
+    fam_handles: Dict[str, Any] = {}
     for idv, sizes in series.items():
         if sizes.size == 0:
             continue
@@ -426,7 +451,7 @@ def main():
     any_avg = False
     y_min_avg = np.inf
     y_max_avg = 0.0
-    fam_handles_avg: Dict[str, any] = {}
+    fam_handles_avg: Dict[str, Any] = {}
     for idv, sizes in series.items():
         weights = series_weights.get(idv)
         if sizes.size == 0 or weights is None or weights.size != sizes.size:

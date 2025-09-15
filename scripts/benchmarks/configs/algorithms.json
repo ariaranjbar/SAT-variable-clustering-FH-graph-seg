@@ -7,7 +7,11 @@
         "build/algorithms/vig_info/vig_info",
         "build/algorithms/vig_info/Debug/vig_info",
         "build/algorithms/vig_info/Release/vig_info",
-        "build/vig_info"
+        "build/vig_info",
+        "build/algorithms/vig_info/vig_info.exe",
+        "build/algorithms/vig_info/Debug/vig_info.exe",
+        "build/algorithms/vig_info/Release/vig_info.exe",
+        "build/vig_info.exe"
       ],
       "cmd_template": [
         "${bin}",
@@ -97,7 +101,11 @@
         "build/algorithms/cnf_info/cnf_info",
         "build/algorithms/cnf_info/Debug/cnf_info",
         "build/algorithms/cnf_info/Release/cnf_info",
-        "build/cnf_info"
+        "build/cnf_info",
+        "build/algorithms/cnf_info/cnf_info.exe",
+        "build/algorithms/cnf_info/Debug/cnf_info.exe",
+        "build/algorithms/cnf_info/Release/cnf_info.exe",
+        "build/cnf_info.exe"
       ],
       "cmd_template": [
         "${bin}",
@@ -154,7 +162,11 @@
         "build/algorithms/segmentation/segmentation",
         "build/algorithms/segmentation/Debug/segmentation",
         "build/algorithms/segmentation/Release/segmentation",
-        "build/segmentation"
+        "build/segmentation",
+        "build/algorithms/segmentation/segmentation.exe",
+        "build/algorithms/segmentation/Debug/segmentation.exe",
+        "build/algorithms/segmentation/Release/segmentation.exe",
+        "build/segmentation.exe"
       ],
       "cmd_template": [
         "${bin}",
@@ -233,7 +245,7 @@
           "name": "tau",
           "cli": "--taus",
           "type": "string",
-          "default": ["3", "5", "10", "inf"],
+          "default": ["100"],
           "allow_inf": true,
           "numeric": "int",
           "min": 2,
@@ -252,9 +264,9 @@
           "name": "threads",
           "cli": "--threads",
           "type": "int",
-          "default": [1, 2, 4],
+          "default": [0],
           "numeric": "int",
-          "min": 1,
+          "min": 0,
           "when": { "equals": { "key": "impl", "value": "opt" } },
           "help": "Threads for opt"
         },
@@ -444,7 +456,11 @@
         "build/algorithms/louvain/louvain",
         "build/algorithms/louvain/Debug/louvain",
         "build/algorithms/louvain/Release/louvain",
-        "build/louvain"
+        "build/louvain",
+        "build/algorithms/louvain/louvain.exe",
+        "build/algorithms/louvain/Debug/louvain.exe",
+        "build/algorithms/louvain/Release/louvain.exe",
+        "build/louvain.exe"
       ],
       "cmd_template": [
         "${bin}",
