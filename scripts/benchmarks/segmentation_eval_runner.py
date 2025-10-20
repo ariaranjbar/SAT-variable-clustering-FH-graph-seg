@@ -21,9 +21,7 @@ JSON config example:
   "maxbuf": 50000000,
   "tau": "inf",
   "k": "10,30,100",
-  "norms": "on,off",
-  "norm_samples": "100,1000",
-    "size_exp": "1.0,1.95",
+  "size_exp": "1.0,1.95",
   "mod_guard": "on,off",
   "gamma": "1.0,0.5",
   "anneal": "on,off",
@@ -120,9 +118,6 @@ def run_seg_eval_on_file(bin_path: Path, cnf_path: Path, out_csv: Path, cfg: dic
             args.extend([cli_opt, str(val)])
 
     maybe("k", "-k")
-    maybe("norms", "--norms")
-    maybe("norm_sample", "--norm-sample")
-    maybe("norm_samples", "--norm-samples")
     maybe("size_exp", "--size-exp")
     maybe("mod_guard", "--mod-guard")
     maybe("gamma", "--gamma")

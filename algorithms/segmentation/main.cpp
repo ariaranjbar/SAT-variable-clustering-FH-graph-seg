@@ -32,8 +32,6 @@ int main(int argc, char **argv)
     cli.add_option(OptionSpec{.longName = "graph-out", .shortName = '\0', .type = ArgType::String, .valueName = "DIR", .help = "Write graph CSVs into DIR as <base>.node.csv and <base>.edges.csv", .required = false, .defaultValue = ""});
     cli.add_option(OptionSpec{.longName = "cross-out", .shortName = '\0', .type = ArgType::String, .valueName = "DIR", .help = "Write strongest cross-component edges CSV into DIR as <base>_cross.csv (columns: u,v,w)", .required = false, .defaultValue = ""});
     // Segmentation behavior knobs
-    cli.add_flag("no-norm", '\0', "Disable distance normalization in segmentation");
-    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultNormSampleEdges)});
     cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "X", .help = "Exponent for |C| in gate denominator (1.0 => k/|C|)", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultSizeExponent)});
     // Modularity guard knobs
     cli.add_flag("no-mod-guard", '\0', "Disable modularity guard (ΔQ tests)");
@@ -121,8 +119,6 @@ int main(int argc, char **argv)
     // Apply optional config knobs
     {
         GraphSegmenterFH::Config cfg = seg.config();
-        if (cli.get_flag("no-norm")) cfg.normalize_distances = false;
-        cfg.norm_sample_edges = static_cast<std::size_t>(cli.get_uint64("norm-sample"));
         try {
             cfg.sizeExponent = std::stod(cli.get_string("size-exp"));
         } catch (...) {
@@ -392,6 +388,7 @@ int main(int argc, char **argv)
 
     const auto cfg = seg.config();
     std::cout << "vars=" << g.n
+              << " clauses=" << cnf.get_clause_count()
               << " edges=" << g.edges.size()
               << " comps=" << seg.num_components()
               << " k=" << k
@@ -409,8 +406,6 @@ int main(int argc, char **argv)
               << " entropyJ=" << cs.entropyJ
               << " modularity=" << Q
               // Segmentation knobs summary for benchmarking
-              << " normalize=" << (cfg.normalize_distances ? 1 : 0)
-              << " norm_sample=" << cfg.norm_sample_edges
               << " size_exp=" << cfg.sizeExponent
               << " modGuard=" << (cfg.use_modularity_guard ? 1 : 0)
               << " gamma=" << cfg.gamma

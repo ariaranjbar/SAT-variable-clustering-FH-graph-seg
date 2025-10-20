@@ -1,0 +1,29 @@
+{
+  "out_dir": "scripts/benchmarks/out",
+  "bench_dir": "benchmarks",
+  "files": {
+    "hashes": [
+      "00d1fe07ab948b348bb3fb423b1ef40d",
+      "02066c116dbacc40ec5cca2067db26c0",
+      "0265448c232e3a25aa5bcd29b1b14567",
+      "02e4f23ed59566d343b605dc2cc30a01",
+      "02f6ca52f1ada872d82035088701b66a",
+      "04ded94454830d4ea960327e8b91f5a3",
+      "04e219c640ed59dc68ea2d50493de5b5"
+    ]
+  },
+  "algorithms": [
+    {
+      "name": "segmentation",
+      "parameters": {
+        "tau": ["inf"],
+        "k": [100],
+        "threads": [0],
+        "size_exp": [1.8],
+        "no_mod_guard_flag": ["--no-mod-guard"],
+        "skip_existing": true,
+        "write_components": ["on"]
+      }
+    }
+  ]
+}

@@ -51,7 +51,7 @@
           "type": "int",
           "default": [1, 2, 4],
           "numeric": "int",
-          "min": 1,
+          "min": 0,
           "when": { "equals": { "key": "impl", "value": "opt" } },
           "help": "Threads for opt"
         },
@@ -181,11 +181,8 @@
         "${threads}",
         "--maxbuf",
         "${maxbuf}",
-        "${no_norm_flag}",
         "--size-exp",
         "${size_exp}",
-        "--norm-sample",
-        "${norm_sample}",
         "${no_mod_guard_flag}",
         "--gamma",
         "${gamma}",
@@ -197,7 +194,7 @@
         "--ambiguous",
         "${ambiguous}",
         "--gate-margin",
-  "${gate_margin}",
+        "${gate_margin}",
         "--comp-out",
         "${comp_out_dir}",
         "--output-base",
@@ -221,25 +218,6 @@
           "numeric": "float",
           "min": 0.0,
           "help": "Exponent for |C| in gate denominator (central default)"
-        },
-        {
-          "name": "no_norm_flag",
-          "map_to": "no_norm_flag",
-          "cli": "--norm-mode",
-          "type": "string",
-          "enum": ["", "--no-norm"],
-          "default": [""],
-          "help": "Normalization mode: '' (on) or --no-norm (off)"
-        },
-        {
-          "name": "norm_sample",
-          "cli": "--norm-samples",
-          "type": "int",
-          "default": [1000],
-          "numeric": "int",
-          "min": 1,
-          "when": { "not": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } } },
-          "help": "Top edges to sample for normalization"
         },
         {
           "name": "tau",
@@ -296,7 +274,14 @@
           "default": [1.0],
           "numeric": "float",
           "min": 0,
-          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "when": {
+            "not": {
+              "equals": {
+                "key": "no_mod_guard_flag",
+                "value": "--no-mod-guard"
+              }
+            }
+          },
           "help": "Modularity resolution gamma"
         },
         {
@@ -306,7 +291,14 @@
           "type": "string",
           "enum": ["", "--no-anneal-guard"],
           "default": [""],
-          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "when": {
+            "not": {
+              "equals": {
+                "key": "no_mod_guard_flag",
+                "value": "--no-mod-guard"
+              }
+            }
+          },
           "help": "Annealing: '' (on) or --no-anneal-guard (off)"
         },
         {
@@ -316,10 +308,26 @@
           "default": [0.0005],
           "numeric": "float",
           "min": 0,
-          "when": { "and": [
-            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
-            { "not": { "equals": { "key": "no_anneal_guard_flag", "value": "--no-anneal-guard" } } }
-          ] },
+          "when": {
+            "and": [
+              {
+                "not": {
+                  "equals": {
+                    "key": "no_mod_guard_flag",
+                    "value": "--no-mod-guard"
+                  }
+                }
+              },
+              {
+                "not": {
+                  "equals": {
+                    "key": "no_anneal_guard_flag",
+                    "value": "--no-anneal-guard"
+                  }
+                }
+              }
+            ]
+          },
           "help": "Initial ΔQ tolerance (central default)"
         },
         {
@@ -329,10 +337,26 @@
           "default": [0.0],
           "numeric": "float",
           "min": 0,
-          "when": { "and": [
-            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
-            { "not": { "equals": { "key": "no_anneal_guard_flag", "value": "--no-anneal-guard" } } }
-          ] },
+          "when": {
+            "and": [
+              {
+                "not": {
+                  "equals": {
+                    "key": "no_mod_guard_flag",
+                    "value": "--no-mod-guard"
+                  }
+                }
+              },
+              {
+                "not": {
+                  "equals": {
+                    "key": "no_anneal_guard_flag",
+                    "value": "--no-anneal-guard"
+                  }
+                }
+              }
+            ]
+          },
           "help": "Annealing scale (0 => auto)"
         },
         {
@@ -341,7 +365,14 @@
           "type": "string",
           "enum": ["accept", "reject", "margin"],
           "default": ["margin"],
-          "when": { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
+          "when": {
+            "not": {
+              "equals": {
+                "key": "no_mod_guard_flag",
+                "value": "--no-mod-guard"
+              }
+            }
+          },
           "help": "Ambiguous policy"
         },
         {
@@ -351,12 +382,21 @@
           "default": [0.05],
           "numeric": "float",
           "min": 0,
-          "when": { "and": [
-            { "not": { "equals": { "key": "no_mod_guard_flag", "value": "--no-mod-guard" } } },
-            { "equals": { "key": "ambiguous", "value": "margin" } }
-          ] },
+          "when": {
+            "and": [
+              {
+                "not": {
+                  "equals": {
+                    "key": "no_mod_guard_flag",
+                    "value": "--no-mod-guard"
+                  }
+                }
+              },
+              { "equals": { "key": "ambiguous", "value": "margin" } }
+            ]
+          },
           "help": "Gate margin ratio for 'margin' policy (central default)"
-  },
+        },
         {
           "name": "write_components",
           "cli": "--write-components",
@@ -367,20 +407,6 @@
         }
       ],
       "auto_params": [
-        {
-          "name": "normalize",
-          "template": "off",
-          "join_out_dir": false,
-          "when": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } }
-        },
-        {
-          "name": "normalize",
-          "template": "on",
-          "join_out_dir": false,
-          "when": {
-            "not": { "equals": { "key": "no_norm_flag", "value": "--no-norm" } }
-          }
-        },
         {
           "name": "comp_out_dir",
           "template": "components/${algo}/tau_${tau}/k_${k}",
@@ -404,8 +430,6 @@
           "threads",
           "maxbuf",
           "size_exp",
-          "norm_sample",
-          "normalize",
           "modGuard",
           "gamma",
           "anneal",
@@ -418,6 +442,7 @@
           "modGateAmb",
           "memlimit_mb",
           "vars",
+          "clauses",
           "edges",
           "comps",
           "modularity",
@@ -433,6 +458,7 @@
         ],
         "required_keys": [
           "vars",
+          "clauses",
           "edges",
           "comps",
           "modularity",

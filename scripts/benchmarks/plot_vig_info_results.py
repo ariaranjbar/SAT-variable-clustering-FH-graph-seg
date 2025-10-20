@@ -108,10 +108,12 @@ def _plot_line_mean_by_threads(df: pd.DataFrame, value_col: str, value_col_label
         return
     d["threads"] = pd.to_numeric(d["threads"], errors="coerce")
     plt.figure(figsize=(9, 6))
-    ax = sns.lineplot(data=d, x="threads", y=value_col, hue=hue, estimator="mean", errorbar="se")
+    ax = sns.lineplot(data=d, x="threads", y=value_col, hue=hue, estimator="mean", errorbar="se", marker='o', markersize=6)
     ax.set_title(title)
     ax.set_xlabel("thread count")
     ax.set_ylabel(value_col_label)
+    if ax.legend_:
+        ax.legend(title="tau")
     plt.tight_layout()
     plt.savefig(outpath, dpi=150)
     plt.close()
@@ -202,7 +204,7 @@ def _plot_corr_heatmap(df: pd.DataFrame, outpath: str, title: str, *, exclude_th
 
 def main():
     ap = argparse.ArgumentParser(description="Plot VIG construction results heatmaps over tau × threads.")
-    ap.add_argument("--csv", default="scripts/benchmarks/out/vig_info_results.csv")
+    ap.add_argument("--csv", default="scripts/benchmarks/out/segmentation_results.csv")
     ap.add_argument("--outdir", default="scripts/benchmarks/out/vig_build_plots")
     ap.add_argument("--impl", default=None, help="Optional: filter to a specific impl (e.g., opt or naive)")
     args = ap.parse_args()

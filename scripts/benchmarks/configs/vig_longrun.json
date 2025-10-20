@@ -1,0 +1,25 @@
+{
+  "out_dir": "scripts/benchmarks/out",
+  "bench_dir": "benchmarks",
+  "files": { "count": 1 },
+  "algorithms": [
+    {
+      "name": "vig_info",
+      "parameters": {
+        "tau": ["inf"],
+        "impl": ["naive"]
+      },
+      "skip_existing": true
+    },
+    {
+      "name": "vig_info",
+      "parameters": {
+        "tau": ["inf"],
+        "impl": ["opt"],
+        "threads": [1,2,4,8],
+        "maxbuf": [50000000]
+      },
+      "skip_existing": true
+    }
+  ]
+}

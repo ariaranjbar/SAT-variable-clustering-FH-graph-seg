@@ -2,13 +2,11 @@
 // segmentation.cpp
 //
 // Felzenszwalb–Huttenlocher (FH) style graph segmentation with optional
-// modularity guard and distance normalization.
+// modularity guard.
 //
 // Implementation highlights (matches code below):
 //  - Inputs: undirected similarity edges (u,v,w) with w>0; distance d=1/w.
 //  - Preprocessing: edges sorted descending by weight (strongest first).
-//  - Distance normalization (optional): set a scale d_scale to the median of
-//    1/w over the top-N edges so k has comparable effect across graphs.
 //  - FH predicate with tunable bias: each component C keeps max_dist(C)
 //    (max edge distance seen within C so far). The gate is
 //        Gate(C) = max_dist(C) + k / |C|^sizeExponent
@@ -76,6 +74,62 @@ namespace thesis
     {
         // Sort edges to process in order of weight
         std::sort(edges.begin(), edges.end(), edge_desc);
+
+        // Create a copy of edges for neighbor tracking
+        const size_t num_vars = dsu_.size();
+        std::vector<unsigned> var_edge_counts(num_vars, 0);
+        for (const auto &e : edges)
+        {
+            var_edge_counts[e.u]++;
+            var_edge_counts[e.v]++;
+        }
+        for (unsigned i = 1; i < num_vars; i++)
+        {
+            var_edge_counts[i] += var_edge_counts[i - 1];
+        }
+        const size_t total_var_edges = var_edge_counts.back();
+        std::vector<std::pair<unsigned, double>> var_neighbors(total_var_edges);
+        for (const auto &e : edges)
+        {
+            var_neighbors[--var_edge_counts[e.u]] = std::make_pair(e.v, e.w);
+            var_neighbors[--var_edge_counts[e.v]] = std::make_pair(e.u, e.w);
+        }
+
+        // function to get sum of weights of edges from u to component c
+        auto sum_weights_to_comp = [&](unsigned u, unsigned c) {
+            double sum = 0.0;
+            unsigned start = var_edge_counts[u];
+            unsigned end_idx = (u + 1 < num_vars ? var_edge_counts[u + 1] : total_var_edges);
+            for (unsigned i = start; i < end_idx; ++i) {
+                unsigned v = var_neighbors[i].first;
+                double w = var_neighbors[i].second;
+                if (dsu_.find(v) == c) {
+                    sum += w;
+                }
+            }
+            return sum;
+        };
+
+        //// function to get weight of edge from node a to node b (0 if none)
+        // auto a_b_weight = [&](unsigned a, unsigned b) {
+        //     unsigned start_a = var_edge_counts[a];
+        //     unsigned end_a = (a + 1 < num_vars ? var_edge_counts[a + 1] : total_var_edges);
+        //     unsigned start_b = var_edge_counts[b];
+        //     unsigned end_b = (b + 1 < num_vars ? var_edge_counts[b + 1] : total_var_edges);
+        //     unsigned second = b, start = start_a, end = end_a;
+        //     if (end_a - start_a > end_b - start_b) {
+        //         second = a; start = start_b; end = end_b;
+        //     }
+        //     for (unsigned i = start; i < end; ++i) {
+        //         unsigned v = var_neighbors[i].first;
+        //         double w = var_neighbors[i].second;
+        //         if (dsu_.find(v) == second) {
+        //             return w;
+        //         }
+        //     }
+        //     return 0.0;
+        // };
+
         // Accumulate total weight and per-node volumes in a single pass
         sum_weights_ = 0.0;
         if (cfg_.use_modularity_guard)
@@ -87,30 +141,6 @@ namespace thesis
                 comp_vol_[e.u] += e.w;
                 comp_vol_[e.v] += e.w;
             }
-        }
-
-        // Optional: precompute a robust distance scale so k has comparable effect across graphs.
-        // Use median of base distances d=1/w from the top N strongest edges.
-        d_scale_ = 1.0;
-        if (cfg_.normalize_distances && !edges.empty())
-        {
-            const size_t take = std::min<size_t>(edges.size(), cfg_.norm_sample_edges);
-            std::vector<double> ds;
-            ds.reserve(take);
-            for (size_t i = 0; i < take; ++i)
-            {
-                const double w = edges[i].w;
-                if (w > 0)
-                    ds.push_back(1.0 / w);
-            }
-            if (!ds.empty())
-            {
-                std::nth_element(ds.begin(), ds.begin() + ds.size() / 2, ds.end());
-                double med = ds[ds.size() / 2];
-                if (med > 0 && std::isfinite(med))
-                    d_scale_ = med;
-            }
-        
         }
 
         intercomp_candidates_.clear();
@@ -141,7 +171,9 @@ namespace thesis
             {
                 // Compute ΔQ tolerance
                 double tolerance = dq_tolerance(a, b);
-                if (accept_by_modularity_lowerbound(a, b, e.w, tolerance))
+                // Lower-bound of sum of weights of edges between components a and b
+                float w_ab_lb = static_cast<float>(sum_weights_to_comp(e.u, b) + sum_weights_to_comp(e.v, a)) - e.w;
+                if (accept_by_modularity_lowerbound(a, b, w_ab_lb, tolerance))
                 {
                     mod_guard_lb_accepts_++;
                 }

@@ -1,13 +1,13 @@
 # segmentation
 
-Segment the Variable Interaction Graph (VIG) of a CNF using a Felzenszwalb–Huttenlocher-style greedy merge with optional distance normalization and a modularity guard.
+Segment the Variable Interaction Graph (VIG) of a CNF using a Felzenszwalb–Huttenlocher-style greedy merge with a modularity guard.
 
 ## Usage
 
 ```bash
 segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t N] [--maxbuf M]
              [--graph-out DIR] [--comp-out DIR] [--cross-out DIR] [--output-base NAME]
-             [--no-norm] [--norm-sample N] [--size-exp X]
+             [--size-exp X]
              [--no-mod-guard] [--gamma G] [--no-anneal-guard] [--dq-tol0 T] [--dq-vscale S]
              [--ambiguous {accept|reject|margin}] [--gate-margin R]
 ```
@@ -34,8 +34,6 @@ Outputs (optional files):
 
 Segmentation behavior knobs:
 
-- --no-norm           Disable distance normalization (default: enabled)
-- --norm-sample N     Top edges sampled for normalization median (default: 1000)
 - --size-exp X        Size exponent in gate denominator (default: 1.95). 1.0 ≈ k/|C|
 
 Modularity guard knobs (for ΔQ gating during merges):
@@ -48,18 +46,17 @@ Modularity guard knobs (for ΔQ gating during merges):
 - --ambiguous POLICY  Ambiguous policy: `accept`, `reject`, or `margin` (default: `margin`)
 - --gate-margin R     Gate margin ratio for `margin` policy (default: 0.05)
 
-Defaults (centralized in GraphSegmenterFH::Config): `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`, normalization on with `--norm-sample 1000`, `--size-exp 1.95`, modularity guard on with `--gamma 1.0`, annealing on, `--dq-tol0 5e-4`, `--dq-vscale 0`, ambiguous=`margin`, `--gate-margin 0.05`.
+Defaults (centralized in GraphSegmenterFH::Config): `--opt`, `--tau inf`, `--k 50.0`, `-t 0`, `--maxbuf 50000000`, `--size-exp 1.95`, modularity guard on with `--gamma 1.0`, annealing on, `--dq-tol0 5e-4`, `--dq-vscale 0`, ambiguous=`margin`, `--gate-margin 0.05`.
 
 ## Output (stdout)
 
 Prints a single summary line (key=value pairs) for the run:
 
 ```text
-vars, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec,
+vars, clauses, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec,
 impl, threads, agg_memory,
 keff, gini, pmax, entropyJ,
-modularity,
-normalize, norm_sample, size_exp,
+modularity, size_exp,
 modGuard, gamma, anneal, dqTol0, dqVscale,
 amb, gateMargin,
 modGateAcc, modGateRej, modGateAmb

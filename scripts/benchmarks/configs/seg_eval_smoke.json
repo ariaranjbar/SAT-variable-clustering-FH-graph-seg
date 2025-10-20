@@ -10,7 +10,6 @@
   "maxbuf": 20000000,
   "tau": "200",
   "k": "10",
-  "norms": "off",
   "size_exp": "1.0",
   "mod_guard": "off",
   "gamma": "1.0",

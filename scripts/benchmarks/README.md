@@ -114,6 +114,6 @@ conda activate thesis-bench
 ## 4) CSV columns (reference)
 
 - VIG results: `file,impl,tau,threads,maxbuf,memlimit_mb,vars,edges,total_sec,parse_sec,vig_build_sec,agg_memory`.
-- Segmentation results: `file,impl,tau,k,threads,maxbuf,size_exp,norm_sample,normalize,modGuard,gamma,anneal,dqTol0,dqVscale,amb,gateMargin,modGateAcc,modGateRej,modGateAmb,memlimit_mb,vars,edges,comps,modularity,keff,gini,pmax,entropyJ,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
+- Segmentation results: `file,impl,tau,k,threads,maxbuf,size_exp,modGuard,gamma,anneal,dqTol0,dqVscale,amb,gateMargin,modGateAcc,modGateRej,modGateAmb,memlimit_mb,vars,edges,comps,modularity,keff,gini,pmax,entropyJ,total_sec,parse_sec,vig_build_sec,seg_sec,agg_memory`.
 
 Logs are cleaned up on success and kept only on failures or when no summary could be parsed.

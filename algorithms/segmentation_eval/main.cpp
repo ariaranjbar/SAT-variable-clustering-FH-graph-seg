@@ -82,10 +82,6 @@ int main(int argc, char **argv) {
 
     // Sweepable segmentation knobs
     // Booleans: offer list-style options; if not provided, derive from single flags where applicable.
-    cli.add_option(OptionSpec{.longName = "norms", .shortName = '\0', .type = ArgType::String, .valueName = "on|off[,..]", .help = "List of normalization settings (on/off)", .required = false, .defaultValue = ""});
-    cli.add_flag("no-norm", '\0', "Disable distance normalization in segmentation (single toggle if --norms not provided)");
-    cli.add_option(OptionSpec{.longName = "norm-sample", .shortName = '\0', .type = ArgType::UInt64, .valueName = "N", .help = "Top edges to sample for median distance normalization", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultNormSampleEdges)});
-    cli.add_option(OptionSpec{.longName = "norm-samples", .shortName = '\0', .type = ArgType::String, .valueName = "N[,..]", .help = "List of norm-sample values", .required = false, .defaultValue = ""});
     cli.add_option(OptionSpec{.longName = "size-exp", .shortName = '\0', .type = ArgType::String, .valueName = "E[,..]", .help = "Size exponent(s) in gate denominator", .required = false, .defaultValue = std::to_string(GraphSegmenterFH::Config::kDefaultSizeExponent)});
     cli.add_option(OptionSpec{.longName = "mod-guard", .shortName = '\0', .type = ArgType::String, .valueName = "on|off[,..]", .help = "List of modularity guard settings (on/off)", .required = false, .defaultValue = ""});
     cli.add_flag("no-mod-guard", '\0', "Disable modularity guard in segmentation (single toggle if --mod-guard not provided)");
@@ -127,22 +123,6 @@ int main(int argc, char **argv) {
     try { k_values = parse_double_list(cli.get_string("k"), "k"); } catch (const std::exception &e) { std::cerr << e.what() << "\n"; return 1; }
 
     // Build sweep lists for segmentation configuration
-    // normalize
-    std::vector<bool> norms;
-    if (cli.provided("norms")) {
-        try { norms = parse_bool_list(cli.get_string("norms"), "norms"); } catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
-    } else {
-        // Default derives from Config constant; user can only disable via --no-norm flag
-        const bool base = GraphSegmenterFH::Config::kDefaultNormalizeDistances;
-        norms = { cli.get_flag("no-norm") ? false : base };
-    }
-    // norm-sample
-    std::vector<unsigned long long> norm_samples;
-    if (cli.provided("norm-samples")) {
-        try { norm_samples = parse_uint64_list(cli.get_string("norm-samples"), "norm-samples"); } catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
-    } else {
-        norm_samples = { cli.get_uint64("norm-sample") };
-    }
     // size-exp
     std::vector<double> size_exps;
     try { size_exps = parse_double_list(cli.get_string("size-exp"), "size-exp"); } catch (const std::exception&) {
@@ -241,35 +221,30 @@ int main(int argc, char **argv) {
     auto count_total = [&]() -> uint64_t {
         uint64_t cnt = 0;
         for (double k : k_values) {
-            for (bool norm_on : norms) {
-                const std::vector<unsigned long long>& ns_list =
-                    norm_on ? norm_samples : std::vector<unsigned long long>{ norm_samples.front() };
-                for (auto ns : ns_list) {
-                    for (double sx : size_exps) {
-                        for (bool mg : mod_guards) {
-                            const std::vector<double>& gamma_list =
-                                mg ? gammas : std::vector<double>{ gammas.front() };
-                            const std::vector<bool>& anneal_list =
-                                mg ? anneals : std::vector<bool>{ anneals.front() };
-                            const std::vector<double>& dq_tol_list =
-                                mg ? dq_tols : std::vector<double>{ dq_tols.front() };
-                            for (double gma : gamma_list) {
-                                for (bool an : anneal_list) {
-                                    const std::vector<double>& vscale_list =
-                                        (mg && an) ? dq_vscales : std::vector<double>{ dq_vscales.front() };
-                                    for (double tol0 : dq_tol_list) {
-                                        for (double vs : vscale_list) {
-                                            const std::vector<std::string> amb_list =
-                                                mg ? ambs : std::vector<std::string>{ ambs.front() };
-                                            for (const auto& amb : amb_list) {
-                                                const bool is_margin = (to_lower(amb) == "margin");
-                                                const std::vector<double> gmarg_list =
-                                                    (mg && is_margin) ? gate_margins : std::vector<double>{ gate_margins.front() };
-                                                for (double gmarg : gmarg_list) {
-                                                    (void)k; (void)ns; (void)sx; (void)mg; (void)gma; (void)an; (void)tol0; (void)vs; (void)amb; (void)gmarg;
-                                                    ++cnt;
-                                                }
-                                            }
+            
+            for (double sx : size_exps) {
+                for (bool mg : mod_guards) {
+                    const std::vector<double>& gamma_list =
+                        mg ? gammas : std::vector<double>{ gammas.front() };
+                    const std::vector<bool>& anneal_list =
+                        mg ? anneals : std::vector<bool>{ anneals.front() };
+                    const std::vector<double>& dq_tol_list =
+                        mg ? dq_tols : std::vector<double>{ dq_tols.front() };
+                    for (double gma : gamma_list) {
+                        for (bool an : anneal_list) {
+                            const std::vector<double>& vscale_list =
+                                (mg && an) ? dq_vscales : std::vector<double>{ dq_vscales.front() };
+                            for (double tol0 : dq_tol_list) {
+                                for (double vs : vscale_list) {
+                                    const std::vector<std::string> amb_list =
+                                        mg ? ambs : std::vector<std::string>{ ambs.front() };
+                                    for (const auto& amb : amb_list) {
+                                        const bool is_margin = (to_lower(amb) == "margin");
+                                        const std::vector<double> gmarg_list =
+                                            (mg && is_margin) ? gate_margins : std::vector<double>{ gate_margins.front() };
+                                        for (double gmarg : gmarg_list) {
+                                            (void)k; (void)sx; (void)mg; (void)gma; (void)an; (void)tol0; (void)vs; (void)amb; (void)gmarg;
+                                            ++cnt;
                                         }
                                     }
                                 }
@@ -293,7 +268,7 @@ int main(int argc, char **argv) {
         "seg_sec",
         "impl","threads","agg_memory_inf","agg_memory_user",
         "keff","gini","pmax","entropyJ","modularity",
-        "normalize","norm_sample","size_exp","modGuard","gamma","anneal",
+        "size_exp","modGuard","gamma","anneal",
         "dqTol0","dqVscale","amb","gateMargin","modGateAcc","modGateRej","modGateAmb"
     );
 
@@ -302,92 +277,84 @@ int main(int argc, char **argv) {
     // Run segmentation for each combination without rebuilding VIG (conditional sweep)
     uint64_t written = 0;
     for (double k : k_values) {
-        for (bool norm_on : norms) {
-            const std::vector<unsigned long long>& ns_list =
-                norm_on ? norm_samples : std::vector<unsigned long long>{ norm_samples.front() };
-            for (auto ns : ns_list) {
-                for (double sx : size_exps) {
-                    for (bool mg : mod_guards) {
-                        const std::vector<double>& gamma_list =
-                            mg ? gammas : std::vector<double>{ gammas.front() };
-                        const std::vector<bool>& anneal_list =
-                            mg ? anneals : std::vector<bool>{ anneals.front() };
-                        const std::vector<double>& dq_tol_list =
-                            mg ? dq_tols : std::vector<double>{ dq_tols.front() };
-                        for (double gma : gamma_list) {
-                            for (bool an : anneal_list) {
-                                const std::vector<double>& vscale_list =
-                                    (mg && an) ? dq_vscales : std::vector<double>{ dq_vscales.front() };
-                                for (double tol0 : dq_tol_list) {
-                                    for (double vs : vscale_list) {
-                                        const std::vector<std::string> amb_list =
-                                            mg ? ambs : std::vector<std::string>{ ambs.front() };
-                                        for (const auto& amb : amb_list) {
-                                            const bool is_margin = (to_lower(amb) == "margin");
-                                            const std::vector<double> gmarg_list =
-                                                (mg && is_margin) ? gate_margins : std::vector<double>{ gate_margins.front() };
-                                            for (double gmarg : gmarg_list) {
-                                                GraphSegmenterFH seg(nvars, k);
-                                                GraphSegmenterFH::Config cfg = seg.config();
-                                                cfg.normalize_distances = norm_on;
-                                                cfg.norm_sample_edges = static_cast<std::size_t>(ns);
-                                                cfg.sizeExponent = sx;
-                                                cfg.use_modularity_guard = mg;
-                                                cfg.gamma = gma;
-                                                cfg.anneal_modularity_guard = an;
-                                                cfg.dq_tolerance0 = tol0;
-                                                cfg.dq_vscale = vs;
-                                                std::string pol = amb; std::string pl = pol;
-                                                std::transform(pl.begin(), pl.end(), pl.begin(), [](unsigned char c){ return std::tolower(c); });
-                                                if (pl == "accept") cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::Accept;
-                                                else if (pl == "reject") cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::Reject;
-                                                else cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::GateMargin;
-                                                cfg.gate_margin_ratio = gmarg;
-                                                seg.set_config(cfg);
+        for (double sx : size_exps) {
+            for (bool mg : mod_guards) {
+                const std::vector<double>& gamma_list =
+                    mg ? gammas : std::vector<double>{ gammas.front() };
+                const std::vector<bool>& anneal_list =
+                    mg ? anneals : std::vector<bool>{ anneals.front() };
+                const std::vector<double>& dq_tol_list =
+                    mg ? dq_tols : std::vector<double>{ dq_tols.front() };
+                for (double gma : gamma_list) {
+                    for (bool an : anneal_list) {
+                        const std::vector<double>& vscale_list =
+                            (mg && an) ? dq_vscales : std::vector<double>{ dq_vscales.front() };
+                        for (double tol0 : dq_tol_list) {
+                            for (double vs : vscale_list) {
+                                const std::vector<std::string> amb_list =
+                                    mg ? ambs : std::vector<std::string>{ ambs.front() };
+                                for (const auto& amb : amb_list) {
+                                    const bool is_margin = (to_lower(amb) == "margin");
+                                    const std::vector<double> gmarg_list =
+                                        (mg && is_margin) ? gate_margins : std::vector<double>{ gate_margins.front() };
+                                    for (double gmarg : gmarg_list) {
+                                        GraphSegmenterFH seg(nvars, k);
+                                        GraphSegmenterFH::Config cfg = seg.config();
+                                        cfg.sizeExponent = sx;
+                                        cfg.use_modularity_guard = mg;
+                                        cfg.gamma = gma;
+                                        cfg.anneal_modularity_guard = an;
+                                        cfg.dq_tolerance0 = tol0;
+                                        cfg.dq_vscale = vs;
+                                        std::string pol = amb; std::string pl = pol;
+                                        std::transform(pl.begin(), pl.end(), pl.begin(), [](unsigned char c){ return std::tolower(c); });
+                                        if (pl == "accept") cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::Accept;
+                                        else if (pl == "reject") cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::Reject;
+                                        else cfg.ambiguous_policy = GraphSegmenterFH::Config::Ambiguous::GateMargin;
+                                        cfg.gate_margin_ratio = gmarg;
+                                        seg.set_config(cfg);
 
-                                                std::vector<Edge> edges = edges_user; // copy then sort
-                                                Timer t_seg;
-                                                seg.run(edges);
-                                                const double sec_seg = t_seg.sec();
+                                        std::vector<Edge> edges = edges_user; // copy then sort
+                                        Timer t_seg;
+                                        seg.run(edges);
+                                        const double sec_seg = t_seg.sec();
 
-                                                auto comm_of = [&seg](uint32_t v) { return static_cast<int>(seg.component_no_compress(v)); };
-                                                const double Q = modularity(nvars, vig_inf.edges, comm_of, /*gamma*/1.0);
+                                        auto comm_of = [&seg](uint32_t v) { return static_cast<int>(seg.component_no_compress(v)); };
+                                        const double Q = modularity(nvars, vig_inf.edges, comm_of, /*gamma*/1.0);
 
-                                                const auto sizes = component_sizes(nvars, [&seg](uint32_t v){ return seg.component_no_compress(v); });
-                                                const auto cs = summarize_components(sizes);
+                                        const auto sizes = component_sizes(nvars, [&seg](uint32_t v){ return seg.component_no_compress(v); });
+                                        const auto cs = summarize_components(sizes);
 
-                                                const double sec_total = t_total.sec();
+                                        const double sec_total = t_total.sec();
 
-                                                const std::string amb_out = mg ? (
-                                                    cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::Accept ? "accept" :
-                                                    (cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::Reject ? "reject" : "margin")
-                                                ) : "n/a";
-                                                const double gmarg_out = (mg && cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::GateMargin) ? gmarg : -1.0;
+                                        const std::string amb_out = mg ? (
+                                            cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::Accept ? "accept" :
+                                            (cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::Reject ? "reject" : "margin")
+                                        ) : "n/a";
+                                        const double gmarg_out = (mg && cfg.ambiguous_policy == GraphSegmenterFH::Config::Ambiguous::GateMargin) ? gmarg : -1.0;
 
-                                                csv.row(
-                                                    nvars,
-                                                    static_cast<uint64_t>(vig_user.edges.size()),
-                                                    static_cast<uint64_t>(vig_inf.edges.size()),
-                                                    static_cast<uint64_t>(seg.num_components()),
-                                                    k,
-                                                    (tau_user == std::numeric_limits<unsigned>::max() ? -1 : static_cast<int>(tau_user)),
-                                                    sec_seg,
-                                                    (use_naive ? "naive" : "opt"),
-                                                    (use_naive ? 1 : (threads == 0 ? -1 : (int)threads)),
-                                                    static_cast<uint64_t>(vig_inf.aggregation_memory),
-                                                    static_cast<uint64_t>(vig_user.aggregation_memory),
-                                                    cs.keff, cs.gini, cs.pmax, cs.entropyJ, Q,
-                                                    (norm_on ? 1 : 0), ns, sx, (mg ? 1 : 0), gma, (an ? 1 : 0),
-                                                    tol0, vs,
-                                                    amb_out,
-                                                    gmarg_out,
-                                                    seg.mod_guard_lb_accepts(), seg.mod_guard_ub_rejects(), seg.mod_guard_ambiguous()
-                                                );
-                                                ++written;
-                                                if (total > 0 && (written % 1000 == 0)) {
-                                                    std::cout << "progress: " << written << "/" << total << " rows written\n";
-                                                }
-                                            }
+                                        csv.row(
+                                            nvars,
+                                            static_cast<uint64_t>(vig_user.edges.size()),
+                                            static_cast<uint64_t>(vig_inf.edges.size()),
+                                            static_cast<uint64_t>(seg.num_components()),
+                                            k,
+                                            (tau_user == std::numeric_limits<unsigned>::max() ? -1 : static_cast<int>(tau_user)),
+                                            sec_seg,
+                                            (use_naive ? "naive" : "opt"),
+                                            (use_naive ? 1 : (threads == 0 ? -1 : (int)threads)),
+                                            static_cast<uint64_t>(vig_inf.aggregation_memory),
+                                            static_cast<uint64_t>(vig_user.aggregation_memory),
+                                            cs.keff, cs.gini, cs.pmax, cs.entropyJ, Q,
+                                            sx, (mg ? 1 : 0), gma, (an ? 1 : 0),
+                                            tol0, vs,
+                                            amb_out,
+                                            gmarg_out,
+                                            seg.mod_guard_lb_accepts(), seg.mod_guard_ub_rejects(), seg.mod_guard_ambiguous()
+                                        );
+                                        ++written;
+                                        if (total > 0 && (written % 1000 == 0)) {
+                                            std::cout << "progress: " << written << "/" << total << " rows written\n";
                                         }
                                     }
                                 }

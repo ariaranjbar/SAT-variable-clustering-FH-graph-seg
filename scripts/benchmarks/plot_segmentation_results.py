@@ -156,10 +156,7 @@ def main():
 
     # Optional: Visualize balance metrics if present (mean by tau×k)
     for metric, title, cmap in [
-        ("keff", "effective components (keff)", "viridis"),
-        ("gini", "gini coefficient", "magma"),
-        ("pmax", "max component share (pmax)", "rocket_r"),
-        ("entropyJ", "entropy evenness (J)", "mako"),
+        ("modularity", "graph modularity", "viridis"),
     ]:
         if metric in df.columns:
             pt = pivot_tau_k_mean(df, metric, tau_order)

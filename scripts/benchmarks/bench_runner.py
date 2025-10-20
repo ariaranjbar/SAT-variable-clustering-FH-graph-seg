@@ -93,7 +93,67 @@ def list_bench_files(bench_dir: Path) -> List[Path]:
     return files
 
 
-def select_files(all_files: Sequence[Path], n: int, reuse_csv: Optional[Path], bench_dir: Path, verbose: bool) -> List[Path]:
+def load_hash_to_filename_map(bench_dir: Path, verbose: bool = False) -> Dict[str, str]:
+    """Load meta.csv and create a mapping from hash to filename."""
+    meta_csv = bench_dir / "meta.csv"
+    hash_map: Dict[str, str] = {}
+    if not meta_csv.exists():
+        vprint(verbose, f"[DEBUG] meta.csv not found at: {meta_csv}")
+        return hash_map
+    
+    vprint(verbose, f"[DEBUG] Loading meta.csv from: {meta_csv}")
+    with meta_csv.open() as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if "hash" in row and "filename" in row:
+                hash_map[row["hash"]] = row["filename"]
+    vprint(verbose, f"[DEBUG] Loaded {len(hash_map)} hash->filename mappings from meta.csv")
+    return hash_map
+
+
+def select_files(all_files: Sequence[Path], n: int, reuse_csv: Optional[Path], bench_dir: Path, verbose: bool, hashes: Optional[List[str]] = None) -> List[Path]:
+    # Priority 1: Select by hashes if provided
+    if hashes is not None:
+        vprint(verbose, f"[DEBUG] Selecting files by {len(hashes)} hashes")
+        hash_to_filename = load_hash_to_filename_map(bench_dir, verbose)
+        sel: List[Path] = []
+        
+        for i, hash_val in enumerate(hashes):
+            vprint(verbose, f"[DEBUG] Processing hash {i+1}/{len(hashes)}: {hash_val}")
+            filename = hash_to_filename.get(hash_val)
+            if filename is None:
+                vprint(verbose, f"[warn] Hash not found in meta.csv: {hash_val}")
+                continue
+            
+            vprint(verbose, f"[DEBUG]   -> Found filename in meta.csv: {filename}")
+            
+            # Find the file in all_files
+            # Files in benchmarks/ are named as: {hash}-{filename}
+            # So we need to look for files that match either:
+            # 1. {hash}-{filename} (new format)
+            # 2. {filename} (old format, for backward compatibility)
+            found = None
+            expected_name_with_hash = f"{hash_val}-{filename}"
+            
+            for p in all_files:
+                if p.name == expected_name_with_hash or p.name == filename:
+                    found = p
+                    break
+            
+            if found:
+                vprint(verbose, f"[DEBUG]   -> Found file in benchmarks/: {found}")
+                sel.append(found)
+            else:
+                vprint(verbose, f"[warn] File not found in benchmarks/: {filename} (hash: {hash_val})")
+                vprint(verbose, f"[DEBUG]   -> Searched for: '{expected_name_with_hash}' or '{filename}'")
+                vprint(verbose, f"[DEBUG]   -> Searched in {len(all_files)} benchmark files")
+                if verbose and len(all_files) > 0:
+                    vprint(verbose, f"[DEBUG]   -> Sample benchmark files: {[f.name for f in all_files[:3]]}")
+        
+        vprint(verbose, f"Selected {len(sel)} files by hash (from {len(hashes)} hashes provided)")
+        return sel
+    
+    # Priority 2: Reuse from CSV
     if reuse_csv is not None:
         if not reuse_csv.is_file():
             raise FileNotFoundError(f"Reuse CSV not found: {reuse_csv}")
@@ -118,7 +178,7 @@ def select_files(all_files: Sequence[Path], n: int, reuse_csv: Optional[Path], b
                 vprint(verbose, f"[warn] Not found in benchmarks/: {bn}")
         vprint(verbose, f"Reusing {len(sel)} files from CSV: {reuse_csv} (ignoring -n)")
         return sel
-    # random pick N
+    # Priority 3: random pick N
     shuf = list(all_files)
     random.shuffle(shuf)
     sel = shuf[:n]
@@ -562,19 +622,29 @@ def run_from_config(config_path: Path, verbose: bool = False) -> int:
     reuse_csv = files_spec.get("reuse_csv")
     reuse_csv_path = Path(reuse_csv) if reuse_csv else None
     count = int(files_spec.get("count", 0))
+    hashes = files_spec.get("hashes")  # Get hashes list if provided
+
+    vprint(verbose, f"[DEBUG] Files config - count: {count}, reuse_csv: {reuse_csv_path}, hashes: {len(hashes) if hashes else 'None'}")
 
     # List all benchmark files
     all_files = list_bench_files(bench_dir)
+    vprint(verbose, f"[DEBUG] Found {len(all_files)} total benchmark files in {bench_dir}")
     if not all_files:
         print(f"No benchmark files found in {bench_dir}", file=sys.stderr)
         return 4
 
-    # Select files
-    if reuse_csv_path is not None:
+    # Select files: priority is hashes > reuse_csv > count
+    if hashes is not None:
+        # hashes overrides count and reuse_csv
+        vprint(verbose, f"[DEBUG] Using hash-based selection (overriding count={count}, reuse_csv={reuse_csv_path})")
+        if not isinstance(hashes, list):
+            raise ConfigError("files.hashes must be a list of hash strings")
+        sel_files = select_files(all_files, 0, None, bench_dir, verbose, hashes=hashes)
+    elif reuse_csv_path is not None:
         sel_files = select_files(all_files, 0, reuse_csv_path, bench_dir, verbose)
     else:
         if count <= 0:
-            raise ConfigError("files.count must be > 0 when reuse_csv not provided")
+            raise ConfigError("files.count must be > 0 when reuse_csv and hashes not provided")
         sel_files = select_files(all_files, count, None, bench_dir, verbose)
 
     # Load registry for defaults/schema

@@ -97,7 +97,7 @@ segmentation -i <file.cnf|-> [--tau N|inf] [--k K] [--naive|--opt] [-t K] [--max
   - `--cross-out DIR` writes `DIR/<base>_cross.csv` with `u,v,w`
   - `--output-base NAME` sets `<base>`; if omitted, it’s derived from the input filename (stripped extensions) or `stdin`. `--comp-base` is deprecated.
 
-Outputs: `vars, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec, impl, threads, agg_memory, keff, gini, pmax, entropyJ`.
+Outputs: `vars, clauses, edges, comps, k, tau, parse_sec, vig_build_sec, seg_sec, total_sec, impl, threads, agg_memory, keff, gini, pmax, entropyJ`.
 
 ## Benchmark runner (Python)
 

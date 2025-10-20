@@ -19,7 +19,7 @@ See `scripts/benchmarks/segmentation_eval_config.sample.json` for a full example
 - combined_csv: path for the merged CSV.
 - impl: "opt" or "naive".
 - threads, maxbuf: optional builder knobs used by the optimized builder.
-- tau, k, norms, norm_samples/norm_sample, size_exp, mod_guard, gamma, anneal, dq_tol0, dq_vscale, ambiguous, gate_margin: passed through to the binary as-is (comma-separated lists supported, handled by the binary).
+- tau, k, size_exp, mod_guard, gamma, anneal, dq_tol0, dq_vscale, ambiguous, gate_margin: passed through to the binary as-is (comma-separated lists supported, handled by the binary).
 
 ## Run
 

@@ -10,8 +10,6 @@
   "maxbuf": 50000000,
   "tau": "100",
   "k": "100",
-  "norms": "off",
-  "norm_samples": "1000",
   "size_exp": "1.95",
   "mod_guard": "on",
   "gamma": "0.5",

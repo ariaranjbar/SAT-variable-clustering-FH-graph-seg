@@ -17,13 +17,11 @@ namespace thesis {
 // Edge with similarity weight (larger = more similar)
 using SegEdge = thesis::Edge;
 
-// Graph segmentation based on the Felzenszwalb–Huttenlocher (FH) predicate with
-// optional distance normalization and a modularity guard.
+// Graph segmentation based on the Felzenszwalb–Huttenlocher (FH) predicate with a modularity guard.
 //
 // Semantics:
 //  - Input edges are undirected similarities (larger weight = more similar).
-//  - Distances are d = 1/w; optionally normalized by the median of top-N d’s
-//    so k has comparable effect across graphs.
+//  - Distances are d = 1/w;
 //  - Gate(C) = max_dist(C) + k / |C|^sizeExponent, with max_dist maintained as
 //    the maximum internal edge distance observed so far.
 //  - Merge rule: allow (a,b) if (1/w)/d_scale <= min(Gate(a), Gate(b)).
@@ -43,8 +41,6 @@ public:
             // code (CLI defaults, fallbacks, etc.) should reference ONLY these
             // constants rather than duplicating literal values. To change a
             // default, update it here and recompile.
-            static constexpr bool kDefaultNormalizeDistances = true;
-            static constexpr std::size_t kDefaultNormSampleEdges = 1000; // top edges for median
             static constexpr double kDefaultSizeExponent = 1.95;         // empirical best average
             static constexpr bool kDefaultUseModularityGuard = true;
             static constexpr double kDefaultGamma = 1.0;
@@ -55,9 +51,6 @@ public:
             static constexpr Ambiguous kDefaultAmbiguousPolicy = Ambiguous::GateMargin;
             static constexpr double kDefaultGateMarginRatio = 0.05;      // 5% margin
 
-        // Normalize distances by median of 1/w over top N edges so k is comparable across graphs.
-            bool normalize_distances = kDefaultNormalizeDistances;
-            std::size_t norm_sample_edges = kDefaultNormSampleEdges; // how many top edges to sample for median
         // Size exponent in the gate denominator: tau = k_eff / (|C|^sizeExponent)
         // - 1.0 reproduces FH (k/|C|)
         // - >1.0 makes merges harder for large components
@@ -163,6 +156,7 @@ private:
         // Trivial bound (optional – never worse)
         eab_ub = std::min(eab_ub, std::min(va, vb));
         // Best-case ΔQ given that e_ab ≤ eab_ub
+        // ΔQ_UB = eab_ub/m - γ * vol[a]*vol[b]/(2 m^2)
         const double dq_max = (eab_ub / m) - (cfg_.gamma * va * vb) / (2.0 * m * m);
         return dq_max;
     }

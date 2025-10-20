@@ -1,0 +1,12 @@
+{
+    "families": [
+        "hardware-miter",
+        "heule-folkman",
+        "knights-tour",
+        "maxsat-optimum",
+        "minimum-disagreement-parity",
+        "random-circuits",
+        "scheduling",
+        "software-verification"
+    ]
+}

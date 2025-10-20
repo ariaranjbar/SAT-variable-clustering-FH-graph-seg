@@ -2,6 +2,7 @@ import os
 import tempfile
 import csv
 import types
+from argparse import Namespace
 from pathlib import Path
 import unittest
 
@@ -125,7 +126,7 @@ class TestRunAlgorithmSkipExisting(unittest.TestCase):
 
     def test_skip_existing_prevents_duplicates(self):
         # First run: should write rows to CSV
-        rc1 = br.run_algorithm_from_registry("toy", self.ns, self.algo_cfg)
+        rc1 = br.run_algorithm_from_registry("toy", Namespace(**vars(self.ns)), self.algo_cfg)
         self.assertEqual(rc1, 0)
         csv_path = self.out_dir / "toy_results.csv"
         self.assertTrue(csv_path.exists())
@@ -135,7 +136,7 @@ class TestRunAlgorithmSkipExisting(unittest.TestCase):
         self.assertGreaterEqual(len(rows1), 3)
 
         # Second run with same params and skip_existing: no new rows should be appended
-        rc2 = br.run_algorithm_from_registry("toy", self.ns, self.algo_cfg)
+        rc2 = br.run_algorithm_from_registry("toy", Namespace(**vars(self.ns)), self.algo_cfg)
         self.assertEqual(rc2, 0)
         with csv_path.open() as f:
             rows2 = list(csv.reader(f))
