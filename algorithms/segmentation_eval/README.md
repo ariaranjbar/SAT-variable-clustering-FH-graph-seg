@@ -130,4 +130,3 @@ segmentation_eval -i path/to/formula.cnf --tau 8 -k 50 --naive --out-csv /tmp/se
 
 - `algorithms/segmentation` — segmentation on a single VIG
 - `algorithms/vig_info` — VIG statistics and optional graph dumps
-- `algorithms/louvain` — Louvain community detection and modularity

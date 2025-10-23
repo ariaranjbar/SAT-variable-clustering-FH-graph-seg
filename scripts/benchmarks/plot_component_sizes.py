@@ -207,17 +207,21 @@ def _row_value(row: Dict[str, Any], key: str) -> Optional[float]:
         return result
 
 
-def _passes_filters(row: Dict[str, Any], flt: NumericFilterConfig) -> bool:
-    """Return True if a segmentation-results row satisfies all min/max thresholds."""
+def _passes_filters(row: Dict[str, Any], flt: NumericFilterConfig) -> Tuple[bool, Optional[str]]:
+    """Return (True, None) if *row* satisfies thresholds; otherwise details of the failure."""
     for key, threshold in flt.get("min", {}).items():
         value = _row_value(row, key)
-        if value is None or value < threshold:
-            return False
+        if value is None:
+            return False, f"missing value for '{key}' (required min {threshold})"
+        if value < threshold:
+            return False, f"min filter '{key}' failed: {value} < {threshold}"
     for key, threshold in flt.get("max", {}).items():
         value = _row_value(row, key)
-        if value is None or value > threshold:
-            return False
-    return True
+        if value is None:
+            return False, f"missing value for '{key}' (required max {threshold})"
+        if value > threshold:
+            return False, f"max filter '{key}' failed: {value} > {threshold}"
+    return True, None
 
 
 def _slugify(text: str) -> str:
@@ -276,8 +280,10 @@ def load_component_series(
             if not row:
                 print(f"Skipping {csv_path} (no results row for hash {hash_id})")
                 continue
-            if not _passes_filters(row, filter_cfg):
-                print(f"Skipping {csv_path} (failed filter thresholds)")
+            passes_filters, reason = _passes_filters(row, filter_cfg)
+            if not passes_filters:
+                detail = reason or "failed filter thresholds"
+                print(f"Skipping {csv_path} ({detail})")
                 continue
 
         label = _make_label(csv_path, in_root)
@@ -371,6 +377,33 @@ def print_family_listing(series: Sequence[ComponentSeries], valid_families: Iter
     print("=" * 60 + "\n")
 
 
+def _save_legend_image(handles: Sequence[Any], labels: Sequence[str], out_path: Path, *, title: str, fontsize: float) -> None:
+    """Render a standalone legend image using *handles* and *labels*."""
+    if not handles or not labels:
+        return
+    legend_height = max(1, len(labels))
+    fig = plt.figure(figsize=(3.0, 0.35 * legend_height + 0.6))
+    fig.legend(
+        handles,
+        labels,
+        loc="center",
+        frameon=False,
+        ncol=1,
+        title=title,
+        fontsize=fontsize,
+        title_fontsize=fontsize,
+    )
+    fig.tight_layout()
+    fig.savefig(out_path.as_posix(), dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _style_sizes(fontsize: float, *, base_line: float, base_marker: float) -> Tuple[float, float]:
+    """Scale line width and marker size relative to the reference font size (7pt)."""
+    scale = max(fontsize / 10.0, 0.1)
+    return base_line * scale, base_marker * scale
+
+
 def plot_combined_coverage(
     series: Sequence[ComponentSeries],
     valid_families: Iterable[str],
@@ -378,14 +411,15 @@ def plot_combined_coverage(
     out_dir: Path,
     title_prefix: str,
     total_files: int,
-    legend_fontsize: float,
+    fontsize: float,
 ) -> None:
     """Overlay coverage curves for every eligible file grouped by family."""
     valid_set = set(valid_families)
     path = out_dir / "combined_topn_coverage.png"
-    plt.figure(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(10, 7))
     fam_handles: Dict[str, Any] = {}
     any_data = False
+    line_width, marker_size = _style_sizes(fontsize, base_line=1.5, base_marker=3.0)
     for record in series:
         if record.family not in valid_set:
             continue
@@ -396,34 +430,36 @@ def plot_combined_coverage(
         if style is None:
             continue
         any_data = True
-        line, = plt.plot(
+        line, = ax.plot(
             x,
             y,
-            linewidth=1.5,
+            linewidth=line_width,
             color=style.color,
             linestyle=style.linestyle,
             alpha=0.9,
             marker=style.marker,
-            markersize=3,
+            markersize=marker_size,
             markevery=1,
         )
         fam_handles.setdefault(record.family, line)
 
     if not any_data:
-        plt.close()
+        plt.close(fig)
         return
 
-    plt.xscale("log")
-    plt.xlabel("n (log)")
-    plt.ylabel("percent covered by top-n components (%)")
-    plt.ylim(bottom=0, top=100)
-    plt.title(f"{title_prefix} — coverage by top-n components (N={total_files} files)")
+    ax.set_xscale("log")
+    ax.set_xlabel("n (log)", fontsize=fontsize)
+    ax.set_ylabel("percent covered by top-n components (%)", fontsize=fontsize)
+    ax.tick_params(labelsize=fontsize)
+    ax.set_ylim(bottom=0, top=100)
+    ax.set_title(f"{title_prefix} — coverage by top-n components (N={total_files} files)", fontsize=fontsize)
     labels = sorted(fam_handles)
     handles = [fam_handles[label] for label in labels]
-    plt.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5), ncol=1, title="family", fontsize=legend_fontsize)
-    plt.tight_layout()
-    plt.savefig(path.as_posix(), dpi=300, bbox_inches="tight")
-    plt.close()
+    fig.tight_layout()
+    legend_path = path.with_name(f"{path.stem}_legend.png")
+    _save_legend_image(handles, labels, legend_path, title="family", fontsize=fontsize)
+    fig.savefig(path.as_posix(), dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_combined_avg_weights(
@@ -433,16 +469,17 @@ def plot_combined_avg_weights(
     out_dir: Path,
     title_prefix: str,
     total_files: int,
-    legend_fontsize: float,
+    fontsize: float,
 ) -> None:
     """Plot per-family averages of minimum internal weights across components."""
     valid_set = set(valid_families)
     path = out_dir / "combined_topn_avg_min_internal_weight.png"
-    plt.figure(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(10, 7))
     fam_handles: Dict[str, Any] = {}
     any_data = False
     y_min = np.inf
     y_max = 0.0
+    line_width, marker_size = _style_sizes(fontsize, base_line=1.5, base_marker=3.0)
 
     for record in series:
         if record.family not in valid_set:
@@ -462,27 +499,28 @@ def plot_combined_avg_weights(
         if finite.size > 0:
             y_min = min(y_min, float(np.min(finite)))
             y_max = max(y_max, float(np.max(finite)))
-        line, = plt.plot(
+        line, = ax.plot(
             x,
             y,
-            linewidth=1.5,
+            linewidth=line_width,
             color=style.color,
             linestyle=style.linestyle,
             alpha=0.9,
             marker=style.marker,
-            markersize=3,
+            markersize=marker_size,
             markevery=1,
         )
         fam_handles.setdefault(record.family, line)
 
     if not any_data:
-        plt.close()
+        plt.close(fig)
         return
 
-    plt.xscale("log")
-    plt.yscale("log")
-    plt.xlabel("n (log)")
-    plt.ylabel("average min_internal_weight of top-n components (log)")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("n (log)", fontsize=fontsize)
+    ax.set_ylabel("average min_internal_weight of top-n components (log)", fontsize=fontsize)
+    ax.tick_params(labelsize=fontsize)
     if np.isfinite(y_min) and y_max > 0:
         bottom = y_min / 1.25 if y_min > 0 else y_min
         top = y_max * 1.1 if y_max > 0 else y_max
@@ -490,14 +528,18 @@ def plot_combined_avg_weights(
             bottom = y_min
         if top <= bottom:
             top = bottom * 1.1
-        plt.ylim(bottom=bottom, top=top)
-    plt.title(f"{title_prefix} — avg min_internal_weight by top-n components (N={total_files} files)")
+        ax.set_ylim(bottom=bottom, top=top)
+    ax.set_title(
+        f"{title_prefix} — avg min_internal_weight by top-n components (N={total_files} files)",
+        fontsize=fontsize,
+    )
     labels = sorted(fam_handles)
     handles = [fam_handles[label] for label in labels]
-    plt.legend(handles, labels, loc="center left", bbox_to_anchor=(1.0, 0.5), ncol=1, title="family", fontsize=legend_fontsize)
-    plt.tight_layout()
-    plt.savefig(path.as_posix(), dpi=300, bbox_inches="tight")
-    plt.close()
+    fig.tight_layout()
+    legend_path = path.with_name(f"{path.stem}_legend.png")
+    _save_legend_image(handles, labels, legend_path, title="family", fontsize=fontsize)
+    fig.savefig(path.as_posix(), dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_family_curves(
@@ -506,7 +548,7 @@ def plot_family_curves(
     style: FamilyStyle,
     out_dir: Path,
     title_prefix: str,
-    legend_fontsize: float,
+    fontsize: float,
 ) -> None:
     """Write per-family coverage and weight plots with legend keyed by file ID."""
     family_series = [record for record in series if record.family == family]
@@ -514,8 +556,10 @@ def plot_family_curves(
         return
 
     coverage_path = out_dir / f"topn_coverage_{_slugify(family)}.png"
-    plt.figure(figsize=(10, 7))
+    fig_cov, ax_cov = plt.subplots(figsize=(10, 7))
     any_coverage = False
+    legend_handles_cov: List[Any] = []
+    line_width_cov, marker_size_cov = _style_sizes(fontsize, base_line=1.3, base_marker=3.0)
     for idx, record in enumerate(sorted(family_series, key=lambda item: item.identifier)):
         x, y = record.coverage_curve()
         if x.size == 0:
@@ -523,35 +567,41 @@ def plot_family_curves(
         any_coverage = True
         # Rotate per-trace line styles to keep densely plotted families legible.
         linestyle = LINESTYLES[idx % len(LINESTYLES)]
-        plt.plot(
+        line, = ax_cov.plot(
             x,
             y,
-            linewidth=1.3,
+            linewidth=line_width_cov,
             color=style.color,
             linestyle=linestyle,
             alpha=0.9,
             marker=style.marker,
-            markersize=3,
+            markersize=marker_size_cov,
             markevery=1,
             label=record.identifier,
         )
+        legend_handles_cov.append(line)
     if any_coverage:
-        plt.xscale("log")
-        plt.xlabel("n (log)")
-        plt.ylabel("percent covered by top-n components (%)")
-        plt.ylim(bottom=0, top=100)
-        plt.title(f"{title_prefix} — {family} (N={len(family_series)} files)")
-        plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), ncol=1, title="file id", fontsize=legend_fontsize)
-        plt.tight_layout()
-        plt.savefig(coverage_path.as_posix(), dpi=300, bbox_inches="tight")
-    plt.close()
+        ax_cov.set_xscale("log")
+        ax_cov.set_xlabel("n (log)", fontsize=fontsize)
+        ax_cov.set_ylabel("percent covered by top-n components (%)", fontsize=fontsize)
+        ax_cov.tick_params(labelsize=fontsize)
+        ax_cov.set_ylim(bottom=0, top=100)
+        ax_cov.set_title(f"{title_prefix} — {family} (N={len(family_series)} files)", fontsize=fontsize)
+        legend_labels_cov = [handle.get_label() for handle in legend_handles_cov]
+        legend_path_cov = coverage_path.with_name(f"{coverage_path.stem}_legend.png")
+        _save_legend_image(legend_handles_cov, legend_labels_cov, legend_path_cov, title="file id", fontsize=fontsize)
+        fig_cov.tight_layout()
+        fig_cov.savefig(coverage_path.as_posix(), dpi=300, bbox_inches="tight")
+    plt.close(fig_cov)
 
     avg_path = out_dir / f"topn_avg_min_internal_weight_{_slugify(family)}.png"
-    plt.figure(figsize=(10, 7))
+    fig_avg, ax_avg = plt.subplots(figsize=(10, 7))
     any_avg = False
     y_min = np.inf
     y_max = 0.0
     plotted = 0
+    legend_handles_avg: List[Any] = []
+    line_width_avg, marker_size_avg = _style_sizes(fontsize, base_line=1.3, base_marker=3.0)
     for idx, record in enumerate(sorted(family_series, key=lambda item: item.identifier)):
         curve = record.avg_weight_curve()
         if curve is None:
@@ -568,23 +618,25 @@ def plot_family_curves(
             y_max = max(y_max, float(np.max(finite)))
         # Rotate per-trace line styles to keep densely plotted families legible.
         linestyle = LINESTYLES[idx % len(LINESTYLES)]
-        plt.plot(
+        line, = ax_avg.plot(
             x,
             y,
-            linewidth=1.3,
+            linewidth=line_width_avg,
             color=style.color,
             linestyle=linestyle,
             alpha=0.9,
             marker=style.marker,
-            markersize=3,
+            markersize=marker_size_avg,
             markevery=1,
             label=record.identifier,
         )
+        legend_handles_avg.append(line)
     if any_avg:
-        plt.xscale("log")
-        plt.yscale("log")
-        plt.xlabel("n (log)")
-        plt.ylabel("average min_internal_weight of top-n components (log)")
+        ax_avg.set_xscale("log")
+        ax_avg.set_yscale("log")
+        ax_avg.set_xlabel("n (log)", fontsize=fontsize)
+        ax_avg.set_ylabel("average min_internal_weight of top-n components (log)", fontsize=fontsize)
+        ax_avg.tick_params(labelsize=fontsize)
         if np.isfinite(y_min) and y_max > 0:
             bottom = y_min / 1.25 if y_min > 0 else y_min
             top = y_max * 1.1 if y_max > 0 else y_max
@@ -592,12 +644,17 @@ def plot_family_curves(
                 bottom = y_min
             if top <= bottom:
                 top = bottom * 1.1
-            plt.ylim(bottom=bottom, top=top)
-        plt.title(f"{title_prefix} — {family} avg min_internal_weight (N={plotted} files)")
-        plt.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), ncol=1, title="file id", fontsize=legend_fontsize)
-        plt.tight_layout()
-        plt.savefig(avg_path.as_posix(), dpi=300, bbox_inches="tight")
-    plt.close()
+            ax_avg.set_ylim(bottom=bottom, top=top)
+        ax_avg.set_title(
+            f"{title_prefix} — {family} avg min_internal_weight (N={plotted} files)",
+            fontsize=fontsize,
+        )
+        legend_labels_avg = [handle.get_label() for handle in legend_handles_avg]
+        legend_path_avg = avg_path.with_name(f"{avg_path.stem}_legend.png")
+        _save_legend_image(legend_handles_avg, legend_labels_avg, legend_path_avg, title="file id", fontsize=fontsize)
+        fig_avg.tight_layout()
+        fig_avg.savefig(avg_path.as_posix(), dpi=300, bbox_inches="tight")
+    plt.close(fig_avg)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -608,7 +665,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser.add_argument("--files", type=Path, nargs="*", default=None, help="Specific *_components.csv files to process (overrides --root if given)")
     parser.add_argument("--outdir", type=Path, default=Path(DEFAULT_OUT_DIR), help="Directory to write combined plots")
     parser.add_argument("--title", type=str, default=None, help="Optional plot title prefix")
-    parser.add_argument("--legend-fontsize", type=float, default=7.0, help="Legend font size (points)")
+    parser.add_argument("--fontsize", type=float, default=7.0, help="Font size (points) for labels, ticks, and legends")
+    parser.add_argument("--seed", type=int, default=0, help="Random seed for deterministic family style assignment (color/marker/linestyle)")
     parser.add_argument("--meta", type=Path, default=Path("benchmarks/sc2024/meta.csv"), help="Path to benchmarks meta.csv with hash,family columns")
     parser.add_argument("--results-csv", type=Path, default=Path(DEFAULT_RESULTS_CSV), help="Path to segmentation_results.csv for additional filtering")
     parser.add_argument("--filter-config", type=Path, default=Path(DEFAULT_FILTER_CONFIG), help="JSON file with numeric min/max thresholds against segmentation_results.csv")
@@ -638,7 +696,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     assign_identifiers(series)
     update_families(series, args.meta)
-    styles = build_family_styles(record.family for record in series)
+    styles = build_family_styles((record.family for record in series), seed=args.seed)
     id_map_path = write_id_map(args.outdir, series, in_root)
 
     counts, valid_families = compute_valid_families(series, args.exclude_families or [])
@@ -652,8 +710,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     prefix = args.title or "component size distribution"
     total_files = len(series)
 
-    plot_combined_coverage(series, valid_families, styles, args.outdir, prefix, total_files, args.legend_fontsize)
-    plot_combined_avg_weights(series, valid_families, styles, args.outdir, prefix, total_files, args.legend_fontsize)
+    plot_combined_coverage(series, valid_families, styles, args.outdir, prefix, total_files, args.fontsize)
+    plot_combined_avg_weights(series, valid_families, styles, args.outdir, prefix, total_files, args.fontsize)
 
     family_outdir = args.outdir / "families"
     ensure_dir(family_outdir)
@@ -661,7 +719,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         style = styles.get(family)
         if style is None:
             continue
-        plot_family_curves(series, family, style, family_outdir, prefix, args.legend_fontsize)
+        plot_family_curves(series, family, style, family_outdir, prefix, args.fontsize)
 
     print(f"Wrote plots to {args.outdir}")
     print(f"Legend ID map: {id_map_path}")

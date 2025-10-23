@@ -43,8 +43,6 @@ NON_PARAM_COMMON: Set[str] = {
     "parse_sec",
     "vig_build_sec",
     "seg_sec",
-    "louvain_graph_sec",
-    "louvain_sec",
     "agg_memory",
 }
 
@@ -63,8 +61,6 @@ NUMERIC_KEYS_COMMON: Set[str] = {
     "parse_sec",
     "vig_build_sec",
     "seg_sec",
-    "louvain_graph_sec",
-    "louvain_sec",
     "agg_memory",
 }
 
@@ -320,7 +316,7 @@ def main() -> None:
         if name and ptype in {"int", "float"}:
             numeric_hint.add(name)
     # Also add common timing columns that appear in the sheet
-    for c in ["total_sec", "parse_sec", "vig_build_sec", "seg_sec", "louvain_graph_sec", "louvain_sec", "agg_memory"]:
+    for c in ["total_sec", "parse_sec", "vig_build_sec", "seg_sec","agg_memory"]:
         if c in all_cols:
             numeric_hint.add(c)
     coerce_types(rows, numeric_hint=numeric_hint)
@@ -346,9 +342,6 @@ def main() -> None:
                 descending = False
             elif "seg_sec" in all_cols:
                 sort_key = "seg_sec"
-                descending = False
-            elif "louvain_sec" in all_cols:
-                sort_key = "louvain_sec"
                 descending = False
             elif "vig_build_sec" in all_cols:
                 sort_key = "vig_build_sec"

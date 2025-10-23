@@ -1,5 +1,4 @@
 add_subdirectory(cnf_info)
 add_subdirectory(vig_info)
 add_subdirectory(segmentation)
-add_subdirectory(louvain)
 add_subdirectory(segmentation_eval)

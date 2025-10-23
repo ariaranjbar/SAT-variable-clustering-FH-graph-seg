@@ -253,21 +253,6 @@ namespace thesis
                           std::size_t max_buffer_contributions,
                           unsigned num_threads)
   {
-    using detail::inv_binom2; // legacy formula used only if needed
-
-    // Derive weighting automatically for legacy signature.
-    Weighting W; W.alpha = pick_alpha_tau_only(clause_size_threshold, 1e-3);
-
-    // Forward to overload with explicit weighting.
-    return build_vig_optimized(cnf, clause_size_threshold, max_buffer_contributions, num_threads, W);
-  }
-
-  VIG build_vig_optimized(const CNF &cnf,
-                          unsigned clause_size_threshold,
-                          std::size_t max_buffer_contributions,
-                          unsigned num_threads,
-                          const Weighting &weighting)
-  {
     using detail::inv_binom2; // fallback if s beyond precomputed table
 
     VIG result;
@@ -400,6 +385,7 @@ namespace thesis
     };
 
     // Precompute weights up to the observed maximum (bounded). Avoid huge allocations for tau=inf.
+    Weighting weighting; weighting.alpha = pick_alpha_tau_only(clause_size_threshold, 1e-3); // Derive weighting automatically.
     const size_t w_table_max = (max_clause_size_observed >= 2 ? max_clause_size_observed : 2);
     std::vector<float> w_table(w_table_max + 1, 0.0f);
     for (size_t s = 2; s <= w_table_max; ++s)
@@ -688,138 +674,3 @@ namespace thesis
   }
 
 } // namespace thesis
-
-// ----------------------------------------------------------------------------
-
-namespace Louvain
-{
-  Graph::Graph()
-  {
-    nb_nodes = 0;
-    nb_links = 0;
-    total_weight = 0;
-  }
-
-  Graph::Graph(int nb_nodes, int nb_links, double total_weight,
-               vector<unsigned long> degrees_,
-               vector<unsigned int> links_,
-               vector<float> weights_)
-      : nb_nodes(nb_nodes),
-        nb_links(nb_links),
-        total_weight(total_weight),
-        degrees(std::move(degrees_)),
-        links(std::move(links_)),
-        weights(std::move(weights_))
-  {
-  }
-
-  bool
-  Graph::check_symmetry()
-  {
-    int error = 0;
-    for (unsigned int node = 0; node < nb_nodes; node++)
-    {
-      pair<vector<unsigned int>::iterator, vector<float>::iterator> p = neighbors(node);
-      for (unsigned int i = 0; i < nb_neighbors(node); i++)
-      {
-        unsigned int neigh = *(p.first + i);
-        float weight = *(p.second + i);
-
-        pair<vector<unsigned int>::iterator, vector<float>::iterator> p_neigh = neighbors(neigh);
-        for (unsigned int j = 0; j < nb_neighbors(neigh); j++)
-        {
-          unsigned int neigh_neigh = *(p_neigh.first + j);
-          float neigh_weight = *(p_neigh.second + j);
-
-          if (node == neigh_neigh && weight != neigh_weight)
-          {
-            cout << node << " " << neigh << " " << weight << " " << neigh_weight << endl;
-            if (error++ == 10)
-              exit(0);
-          }
-        }
-      }
-    }
-    return (error == 0);
-  }
-
-  Graph build_graph(const thesis::CNF &cnf)
-  {
-    thesis::Weighting W; W.alpha = 1.0; // preserve legacy weighting unless caller provides different α
-    return build_graph(cnf, W);
-  }
-
-  Graph build_graph(const thesis::CNF &cnf,
-                    const thesis::Weighting &weighting)
-  {
-    Graph g;
-    const unsigned int n = cnf.get_variable_count();
-    g.nb_nodes = n;
-
-    if (n < 2)
-    {
-      g.nb_links = 0;
-      g.total_weight = 0.0;
-      return g;
-    }
-
-    const auto &clauses = cnf.get_clauses();
-
-    // Per-node neighbor aggregation map: neighbor -> weight
-    std::vector<std::unordered_map<unsigned int, float>> adj(n);
-
-    for (const auto &c : clauses)
-    {
-      const size_t s = c.size();
-      if (s < 2) continue; // skip unit / empty
-      const float w_pair = static_cast<float>(weighting.pair_weight(s));
-      for (size_t i = 0; i + 1 < s; ++i)
-      {
-        const unsigned int u = static_cast<unsigned int>(std::abs(c[i]) - 1);
-        for (size_t j = i + 1; j < s; ++j)
-        {
-          const unsigned int v = static_cast<unsigned int>(std::abs(c[j]) - 1);
-          adj[u][v] += w_pair;
-          adj[v][u] += w_pair;
-        }
-      }
-    }
-
-    // Prefix-sum degrees and allocate CSR arrays
-    g.degrees.resize(n);
-    unsigned long cumulative = 0ul;
-    for (unsigned int u = 0; u < n; ++u)
-    {
-      cumulative += static_cast<unsigned long>(adj[u].size());
-      g.degrees[u] = cumulative;
-    }
-    g.nb_links = cumulative; // directed links (both directions stored)
-
-    g.links.resize(g.nb_links);
-    g.weights.resize(g.nb_links);
-
-    // Fill CSR
-    std::vector<unsigned long> write_pos(n, 0ul);
-    for (unsigned int u = 0; u < n; ++u)
-      write_pos[u] = (u == 0 ? 0ul : g.degrees[u - 1]);
-
-    double total_w = 0.0;
-    for (unsigned int u = 0; u < n; ++u)
-    {
-      std::vector<std::pair<unsigned int, float>> neigh(adj[u].begin(), adj[u].end());
-      // Optional: deterministic order by sorting neighbors
-      // std::sort(neigh.begin(), neigh.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
-
-      for (const auto &kv : neigh)
-      {
-        const unsigned long p = write_pos[u]++;
-        g.links[p] = kv.first;
-        g.weights[p] = kv.second;
-        total_w += static_cast<double>(kv.second);
-      }
-    }
-
-    g.total_weight = total_w;
-    return g;
-  }
-}

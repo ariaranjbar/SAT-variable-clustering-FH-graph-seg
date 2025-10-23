@@ -188,6 +188,30 @@ See `algorithms/README.md` for a short guide. In brief:
 
 Sample and large inputs must be put under `benchmarks/` (can be compressed as `.xz`). The Python runner discovers `*.cnf` and `*.cnf.xz` recursively.
 
+## Bench runner
+
+Use the batch runner when you want reproducible CLI runs with per-run logs. Read the corresponding readme file for the bench runner script to learn more.
+
+1. Build the executables (Release or Debug) so `bench_runner.py` can discover them under `build/`.
+2. Kick off a tiny sweep; the example below grabs 10 CNFs from `benchmarks/sc2024` and runs the segmentation binary on them with verbose logging:
+  ```powershell
+  python scripts/benchmarks/bench_runner.py segmentation -n 10 --bench-dir benchmarks/sc2024 --out-dir scripts/benchmarks/out --implementations opt --taus 100 --ks 100 --threads 1 --verbose
+  ```
+3. Watch stderr for the temporary log path; all logs land in `scripts/benchmarks/out/`. Successful runs delete their log automatically, while failures or missing summaries keep the `.log` file for inspection.
+
+## Plotting
+
+The repository ships multiple plotting helpers under `scripts/benchmarks/`—the steps below show one representative workflow.
+
+Once you have segmentation component CSVs in `scripts/benchmarks/out/components`, you can visualize coverage curves.
+
+1. Make sure `plot_component_sizes.py` sees the component exports you generated with the bench runner (defaults scan `scripts/benchmarks/out/components`).
+2. Render combined coverage plots grouped by benchmark family:
+  ```powershell
+  python scripts/benchmarks/plot_component_sizes.py --root scripts/benchmarks/out/components --outdir scripts/benchmarks/out/component_size_plots --meta benchmarks/sc2024/meta.csv --results-csv scripts/benchmarks/out/segmentation_results.csv
+  ```
+3. Inspect the PNGs (and legend helper CSV) under `scripts/benchmarks/out/component_size_plots` for per-family component coverage curves.
+
 ## Contributing
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -195,3 +219,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Citation
 
 If you use this code in academic work, please cite the associated thesis/publication if applicable.
+
+## License
+
+This project is available under the [MIT License](LICENSE).
