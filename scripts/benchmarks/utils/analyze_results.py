@@ -66,11 +66,18 @@ NUMERIC_KEYS_COMMON: Set[str] = {
 
 def load_csv(paths: List[Path]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
+    missing: List[Path] = []
     for p in paths:
-        with p.open("r", newline="") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                rows.append(dict(r))
+        try:
+            with p.open("r", newline="") as f:
+                reader = csv.DictReader(f)
+                for r in reader:
+                    rows.append(dict(r))
+        except FileNotFoundError:
+            missing.append(p)
+    if missing:
+        missing_str = ", ".join(str(p) for p in missing)
+        raise FileNotFoundError(f"CSV path(s) not found: {missing_str}")
     return rows
 
 
@@ -157,6 +164,7 @@ def param_columns_for_algo(algo_entry: Dict[str, Any], actual_cols: Iterable[str
 def apply_filters(rows: List[Dict[str, Any]], filters: List[str]) -> List[Dict[str, Any]]:
     if not filters:
         return rows
+
     def match(r: Dict[str, Any]) -> bool:
         for f in filters:
             if "=" not in f:
@@ -174,6 +182,7 @@ def apply_filters(rows: List[Dict[str, Any]], filters: List[str]) -> List[Dict[s
                 continue
             return False
         return True
+
     return [r for r in rows if match(r)]
 
 
@@ -200,6 +209,15 @@ def param_signature(row: Dict[str, Any], param_cols: List[str]) -> Tuple:
     return tuple((c, row.get(c)) for c in param_cols)
 
 
+def _coerce_sort_value(value: Any, descending: bool) -> float:
+    if value is None:
+        return float("-inf") if descending else float("inf")
+    try:
+        return float(value)
+    except Exception:
+        return float("-inf") if descending else float("inf")
+
+
 def top_per_file(rows: List[Dict[str, Any]], top_n: int, param_cols: List[str], sort_key: str, descending: bool, dedup_params: bool) -> Dict[str, List[Dict[str, Any]]]:
     groups = group_by_file(rows)
     out: Dict[str, List[Dict[str, Any]]] = {}
@@ -210,28 +228,17 @@ def top_per_file(rows: List[Dict[str, Any]], top_n: int, param_cols: List[str], 
             for r in rs:
                 sig = param_signature(r, param_cols)
                 cur = best_by_sig.get(sig)
-                key_val = r.get(sort_key)
-                try:
-                    score = float(key_val)
-                except Exception:
-                    score = float("-inf")
+                score = _coerce_sort_value(r.get(sort_key), descending)
                 if cur is None:
                     best_by_sig[sig] = r
                 else:
-                    try:
-                        cur_score = float(cur.get(sort_key))
-                    except Exception:
-                        cur_score = float("-inf")
+                    cur_score = _coerce_sort_value(cur.get(sort_key), descending)
                     if (score > cur_score) if descending else (score < cur_score):
                         best_by_sig[sig] = r
             rs = list(best_by_sig.values())
         # Sort and take top N
         def sortval(r: Dict[str, Any]):
-            v = r.get(sort_key)
-            try:
-                return float(v)
-            except Exception:
-                return float("-inf") if descending else float("inf")
+            return _coerce_sort_value(r.get(sort_key), descending)
         rs.sort(key=sortval, reverse=descending)
         out[f] = rs[:top_n]
     return out
@@ -301,7 +308,11 @@ def main() -> None:
         default = Path(__file__).resolve().parent.parent / "out" / csv_file_name
         csv_paths = [default]
 
-    rows = load_csv(csv_paths)
+    try:
+        rows = load_csv(csv_paths)
+    except FileNotFoundError as exc:
+        print(exc)
+        return
     if not rows:
         print("No rows found. Check CSV path(s).")
         return
@@ -322,10 +333,14 @@ def main() -> None:
     coerce_types(rows, numeric_hint=numeric_hint)
     # refresh columns after coercion
     all_cols = list(rows[0].keys())
-    user_param_cols = args.param_cols.split(",") if args.param_cols else None
+    user_param_cols = [c.strip() for c in args.param_cols.split(",") if c.strip()] if args.param_cols else None
     param_cols = param_columns_for_algo(algo_entry, all_cols, user_param_cols)
 
     rows = apply_filters(rows, args.filter)
+
+    if not rows:
+        print("No rows remain after applying filters.")
+        return
 
     if args.cmd == "top":
         top_n = int(args.top)
@@ -355,7 +370,7 @@ def main() -> None:
 
         # Decide columns to show
         if args.show:
-            show_cols = [c for c in args.show.split(",") if c]
+            show_cols = [c.strip() for c in args.show.split(",") if c.strip()]
         else:
             # Choose identifier column: prefer 'file', else 'file_id'
             id_col = "file" if "file" in all_cols else ("file_id" if "file_id" in all_cols else "file")
