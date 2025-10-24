@@ -40,7 +40,7 @@ def tau_label_and_order(df: pd.DataFrame) -> List[str]:
 def load(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     # Coerce types we need
-    for col in ["threads", "vars", "edges"]:
+    for col in ["threads", "vars", "clauses", "edges"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     for col in ["total_sec", "parse_sec", "vig_build_sec", "agg_memory"]:
@@ -142,20 +142,20 @@ def _plot_corr_heatmap(df: pd.DataFrame, outpath: str, title: str, *, exclude_th
     - tau (numeric; prefers tau_norm if present)
     - threads
     - vars
+    - clauses
     - edges
     - parse_sec -> label "parsing (s)"
     - vig_build_sec -> label "vig construction (s)"
-    - agg_memory -> label "memory usage"
     """
     # Desired columns and display labels (internal_name, display_label)
     desired_specs = [
         ("tau", "tau"),
         ("threads", "threads"),
         ("vars", "vars"),
+        ("clauses", "clauses"),
         ("edges", "edges"),
         ("parse_sec", "parsing (s)"),
         ("vig_build_sec", "vig construction (s)"),
-        ("agg_memory", "memory usage"),
     ]
     if exclude_threads:
         desired_specs = [spec for spec in desired_specs if spec[0] != "threads"]
@@ -204,7 +204,7 @@ def _plot_corr_heatmap(df: pd.DataFrame, outpath: str, title: str, *, exclude_th
 
 def main():
     ap = argparse.ArgumentParser(description="Plot VIG construction results heatmaps over tau × threads.")
-    ap.add_argument("--csv", default="scripts/benchmarks/out/segmentation_results.csv")
+    ap.add_argument("--csv", default="scripts/benchmarks/out/vig_info_results.csv")
     ap.add_argument("--outdir", default="scripts/benchmarks/out/vig_build_plots")
     ap.add_argument("--impl", default=None, help="Optional: filter to a specific impl (e.g., opt or naive)")
     args = ap.parse_args()

@@ -97,6 +97,7 @@ int main(int argc, char** argv) {
     }
 
     std::cout << "vars=" << g.n
+                        << " clauses=" << cnf.get_clause_count()
                         << " edges=" << g.edges.size()
                         << " parse_sec=" << sec_parse
                         << " vig_build_sec=" << sec_build

@@ -79,7 +79,7 @@ vig_info -i <file.cnf|-> [--tau N|inf] [--naive|--opt] [-t K] [--maxbuf M] [--gr
 - `--maxbuf` (opt only) capacity for batched contributions
 - `--graph-out FILE` writes `FILE.node.csv` and `FILE.edges.csv`
 
-Outputs: `vars, edges, parse_sec, vig_build_sec, total_sec, impl, tau, threads, agg_memory`.
+Outputs: `vars, clauses, edges, parse_sec, vig_build_sec, total_sec, impl, tau, threads, agg_memory`.
 
 ### segmentation
 

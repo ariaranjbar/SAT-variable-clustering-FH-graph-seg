@@ -16,7 +16,7 @@ What it plots:
 - Heatmap of `(vig_build_sec / parse_sec) / per-file mean` over `tau × threads` (for `opt`)
 - Heatmap of memory usage fraction over `tau × threads` (for `opt`)
 - Line plot of mean `(vig_build_sec / parse_sec)` vs threads grouped by tau (for `opt`)
-- Correlation heatmap of numeric features (includes tau, threads, vars, edges, parse_sec, vig_build_sec, agg_memory)
+- Correlation heatmap of numeric features (includes tau, threads, vars, clauses, edges, parse_sec, vig_build_sec, agg_memory)
 
 Inputs:
 

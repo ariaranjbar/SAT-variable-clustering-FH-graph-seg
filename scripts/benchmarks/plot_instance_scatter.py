@@ -17,8 +17,8 @@ from family_map_utils import families_for_csvs
 from plot_styles import build_family_styles
 
 DEFAULT_META = Path("benchmarks/sc2024/meta.csv")
-DEFAULT_X = "edges"
-DEFAULT_Y = "vig_build_sec"
+DEFAULT_X = "clauses"
+DEFAULT_Y = "vars"
 
 
 def ensure_parent(path: Path) -> None:

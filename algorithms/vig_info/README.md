@@ -18,7 +18,7 @@ vig_info -i <file.cnf|-> [--tau N|inf] [--naive|--opt] [-t K] [--maxbuf M] [--gr
 
 Defaults: `--opt`, `--tau inf`, `-t 0`, `--maxbuf 50000000`.
 
-Output fields include: `vars, edges, parse_sec, vig_build_sec, total_sec, impl, tau, threads, agg_memory`.
+Output fields include: `vars, clauses, edges, parse_sec, vig_build_sec, total_sec, impl, tau, threads, agg_memory`.
 
 ## Examples
 

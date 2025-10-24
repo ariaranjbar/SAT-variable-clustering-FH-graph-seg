@@ -30,6 +30,7 @@ NON_PARAM_COMMON: Set[str] = {
     "memlimit_mb",
     # graph stats
     "vars",
+    "clauses",
     "edges",
     "comps",
     # objective/metrics
@@ -50,6 +51,7 @@ NON_PARAM_COMMON: Set[str] = {
 NUMERIC_KEYS_COMMON: Set[str] = {
     "memlimit_mb",
     "vars",
+    "clauses",
     "edges",
     "comps",
     "modularity",

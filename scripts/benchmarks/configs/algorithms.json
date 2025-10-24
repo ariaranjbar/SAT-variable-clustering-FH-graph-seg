@@ -76,6 +76,7 @@
           "maxbuf",
           "memlimit_mb",
           "vars",
+          "clauses",
           "edges",
           "total_sec",
           "parse_sec",
@@ -84,6 +85,7 @@
         ],
         "required_keys": [
           "vars",
+          "clauses",
           "edges",
           "total_sec",
           "impl",
